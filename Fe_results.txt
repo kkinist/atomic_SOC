@@ -1,0 +1,33 @@
+Some results from atomic_soc2.ipynb
+
+
+Molpro source file: fe_15Q21T_ctzdk_x2c.pro
+Alternative values for SOC(5D) of atom Fe:
+-------------------------
+eq (1)       -403.0 cm-1
+raw theory   -428.9 cm-1
+avgd theory  -429.3 cm-1
+eq (2)       -417.7 cm-1
+-------------------------
+For the relevant levels, the weighted RMS error in theoretical energies = 218.3 cm-1
+
+
+Molpro source file: fe_ci_15Q7T_c5zdk_x2c.pro
+Alternative values for SOC(5D) of atom Fe:
+-------------------------
+eq (1)       -403.0 cm-1
+raw theory   -426.7 cm-1
+avgd theory  -427.7 cm-1
+eq (2)       -403.1 cm-1
+-------------------------
+For the relevant levels, the weighted RMS error in theoretical energies = 37.8 cm-1
+
+Molpro source file: fe_15Q7T_ctzdk_x2c.pro
+Alternative values for SOC(5D) of atom Fe:
+-------------------------
+eq (1)       -403.0 cm-1
+raw theory   -396.7 cm-1
+avgd theory  -397.6 cm-1
+eq (2)       -403.0 cm-1
+-------------------------
+For the relevant levels, the weighted RMS error in theoretical energies = 11.1 cm-1
