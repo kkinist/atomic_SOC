@@ -40,6 +40,7 @@ AMU2AU = AMU / EMASS       # amu expressed in a.u. (viz., electron masses)
 EV2CM = AU2CM / AU2EV      # eV expressed in cm^-1
 EV2KJMOL = AU2KJMOL / AU2EV  # eV expressed in kJ/mol
 KJMOL2CM = AU2CM / AU2KJMOL  # kJ/mol expressed in cm**-1
+ECHARGE = 1.602176634e-19  # electron charge in C (exact)
 
 DEBYE = 0.3934303  # Debye/e.a0 from a less reliable source
 
