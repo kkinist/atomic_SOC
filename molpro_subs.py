@@ -1518,6 +1518,7 @@ class fullmatSOCI:
         # add identifying prefixes to term labels as needed
         dfterm['Term'] = chem.enumerative_prefix(dfterm.Term, always=always)
         self.dfterm = dfterm
+        self.nterm = len(dfterm)
         # establish correspondence between terms and SO basis states
         sob_iterm = [None] * self.dimen # Term parent for each SO basis state
         term_iso = []   # SO basis states derived from each term
@@ -1528,7 +1529,7 @@ class fullmatSOCI:
                     sobl.append(isob)
                     sob_iterm[isob] = iterm
             term_iso.append(sobl)
-        self.sob_iterm =sob_iterm
+        self.sob_iterm = sob_iterm
         self.term_iso = term_iso
         # compute term weight in each state
         self.compute_term_weights()
