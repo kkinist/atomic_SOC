@@ -6090,6 +6090,11 @@ def round_to_tol(x, tol):
         y = n * tol
     return np.round(y, ndec)
 ##
+def round_dict(d, ndig=3):
+    # return a copy of 'd' with values rounded to 'ndig' 
+    dr = {k: np.round(v, ndig) for k, v in d.items()}
+    return dr
+##
 def halves(spin):
     # Convert decimal number like 2.5 to a fraction
     #   string like '5/2'
@@ -7453,6 +7458,48 @@ def displayDF(df, maxrows=0):
     except NameError: 
         print(df)
     return
+##
+def JCAMP_MS(fname):
+    # Read a mass spec file in JCAMP-DX format
+    #  this is probably not robust
+    # Return a dict with metadata, and two lists x, y
+    rdict = {}
+    with open(fname) as F:
+        peakbuf = ''
+        for line in F:
+            if 'Name:' in line:
+                rdict['name'] = line.split(' ', 1)[1].rstrip()
+            elif 'InChIKey:' in line:
+                rdict['inchikey'] = line.split()[1].rstrip()
+            elif 'Formula:' in line:
+                rdict['formula'] = line.split()[1].rstrip()
+            elif 'MW:' in line:
+                rdict['MW'] = float(line.split()[1])
+            elif 'ExactMass:' in line:
+                rdict['MW_exact'] = float(line.split()[1])
+            elif 'NIST#:' in line:
+                rdict['NISTnr'] = line.split()[1].rstrip()
+            elif 'DB#:' in line:
+                rdict['DBnr'] = line.split()[1].rstrip()
+            elif 'Comments:' in line:
+                rdict['comments'] = line.split(' ', 1)[1].rstrip()
+            elif 'Num Peaks:' in line:
+                rdict['npeaks'] = npeak = int(line.split()[-1])
+            else:
+                # assume data
+                peakbuf += line.rstrip()
+    pairs = peakbuf.split(';')
+    mz = []
+    height = []
+    for pair in pairs:
+        a = pair.strip().split()
+        if len(a) == 2:
+            mz.append(float(a[0]))
+            height.append(float(a[1]))
+    if len(mz) != npeak:
+        print_err('', f'There are {len(pairs)} peaks but {npeak} were expected',
+                  halt=False)
+    return rdict, mz, height
 ##
 getframe_expr = 'sys._getframe({}).f_code.co_name'
 def print_err(errtype, name='', halt=True):
