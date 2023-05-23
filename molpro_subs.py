@@ -521,8 +521,8 @@ class MRCI:
         return df.T
     def properties(self):
         # return a DataFrame of interesting properties
-        rx_energy = re.compile(r' !MRCI STATE\s*(\d+\.\d) Energy\s+([-]?\d+\.\d+)')
-        rx_dip = re.compile(r' !MRCI STATE\s*(\d+\.\d) Dipole moment')
+        rx_energy = re.compile(r' !(?:MRCI|CI\(SD\)) STATE\s*(\d+\.\d) Energy\s+([-]?\d+\.\d+)')
+        rx_dip = re.compile(r' !(?:MRCI|CI\(SD\)) STATE\s*(\d+\.\d) Dipole moment')
         # if there is only one state, "rotated" (below) does not occur
         # "rotated" is after "relaxed" in the output file
         rx_dav = re.compile(r' Cluster corrected energies\s+([-]?\d+\.\d+) \(Davidson, (relaxed|rotated) reference\)')
@@ -3362,6 +3362,9 @@ def readSOprops(fname, linenum=False):
                         if val is not None:
                             dfret[f'<i|{el}|i>'] = np.array(val).astype(float)
                     for el in ['x', 'y', 'z']:
+                        if not len(tdipR[el]):
+                            # no non-zero values
+                            continue
                         valR = np.array(tdipR[el]).astype(float)
                         valI = np.array(tdipI[el]).astype(float)
                         cdip = valR + 1j * valI
