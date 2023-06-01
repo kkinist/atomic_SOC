@@ -1379,7 +1379,7 @@ class fullmatSOCI:
     May 2022
     '''
     def __init__(self, fpro, hybrid=False, quiet=False, sortval=False,
-                 atom=False):
+                 atom=False, props=False):
         # 'fpro' is the name of Molpro SO-CI output file
         # if 'hybrid' is True, replace MRCI+Q energies by 
         #   the HLSDIAG() array
@@ -1442,7 +1442,8 @@ class fullmatSOCI:
         # get eigens that correspond to the matrix
         self.map_basis_to_CI()
         self.diagonalize(store=True, vectors=True, sortval=sortval)
-        self.props = readSOprops(fpro)
+        if props:
+            self.props = readSOprops(fpro)
     def diagonalize(self, store=False, vectors=False, sortval=True):
         # compute squared eigenvectors and eigenvalues
         # if 'store' == False, return (vals, vecsq, ciwt) and do not modify attributes
@@ -1450,7 +1451,7 @@ class fullmatSOCI:
         # if 'vectors' == True, also return (or modify) eigenvectors
         # if 'sortval' = True, sort by real part of eigenvalues
         # also return/store eigenvectors if 'vectors' == True
-        eigvals, eigvecs = np.linalg.eigh(self.matrix)
+        eigvals, eigvecs = np.linalg.eigh(self.matrix) # columns are eigenvectors
         vals = eigvals.real  # any imaginary part is wrong anyway
         vecsq = np.abs(eigvecs) ** 2  # (c**2)
         if sortval:
@@ -3351,6 +3352,7 @@ def readSOprops(fname, linenum=False):
     re_tdipnr = re.compile(r'^(\s+\d+)+$')
     inblock = False
     el = dfret = None
+    havenr = False
     with open(fname, 'r', errors='replace') as F:
         for lno, line in enumerate(F):
             if inblock:
@@ -3383,11 +3385,13 @@ def readSOprops(fname, linenum=False):
                         else:
                             dip[el] = []
                             nr = []  # state numbers
+                            havenr = True
                     elif m.group(2) == '1':
                         # transition dipole component
                         tdipR[el] = []  # real component
                         tdipI[el] = []  # imag component
                         nr = []
+                        havenr = True
                     else:
                         # should never get here
                         print('group2 = ', m.group(2))
@@ -3395,9 +3399,9 @@ def readSOprops(fname, linenum=False):
                     tdipR[el] = tdipR[el] + line.split()[3:]
                 if re_imag.match(line):
                     tdipI[el] = tdipI[el] + line.split()[3:]
-                if re_tdipnr.match(line):
+                if re_tdipnr.match(line) and havenr:
                     nr = nr + line.split()
-                if re_dipnr.match(line):
+                if re_dipnr.match(line) and havenr:
                     nr = nr + line.split()[1:]
                 if re_dip.match(line):
                     dip[el] = dip[el] + line.split()[1:]
