@@ -1645,9 +1645,26 @@ class fullmatSOCI:
             chem.print_err('', 'no states with label {:s}'.format(olbl))
         else:
             return il[0]
+    def average_SO_levels(self, be_close='E', tol=1.e-5, be_same=['Ω', 'term', 'label'],
+                        to_avg = ['E', 'cm-1', 'exc']):
+        # Create a DataFrame of averaged SO levels, indexed from 0 by energy
+        #   store the DF as an attribute
+        # Also create and store a list mapping microstates to levels
+        # Return nothing
+        dflevel = average_SO_levels(self.dfso, be_close=be_close, tol=tol,
+                                    be_same=be_same, to_avg=to_avg)
+        dflevel = dflevel.reset_index(drop=True)
+        self.dflevel = dflevel
+        ilvl = [-1] * self.dimen  # ilvl[i] is the level that holds microstate i
+        for ilev, nrs in enumerate(dflevel.Nr):
+            for ist in nrs:
+                j = ist - 1  # 0-indexed instead of 1-
+                ilvl[j] = ilev
+        self.ilvl = ilvl
+        return
     def composition_of_level(self, ilevel, thr=1.e-4, normalize=False,
                              silent=False):
-        # return DataFrames showing CI states or terms that contribute at least 'thr' to level 'ilevel'
+        # return DataFrames showing CI states and terms that contribute at least 'thr' to level 'ilevel'
         if ilevel not in self.dfso.index:
             chem.print_err('', f'ilevel = {ilevel} is not an index value in the DataFrame \'dfso\'')
         dfci = self.dfci.copy()
@@ -1671,11 +1688,14 @@ class fullmatSOCI:
         dfci = dfci[dfci[hdr] >= thr]
         dfterm = dfterm[dfterm[hdr] >= thr]
         return dfci, dfterm
-    def level_contributions_from_term(self, termlabel, thr=1.e-4, normalize=False):
+    def level_contributions_from_term(self, termlabel, thr=1.e-4, normalize=False,
+                                      cols=None):
         # return DataFrame showing levels to which specified term contributes at least 'thr'
         # 'termlabel' can be an index (into self.dfterm) or a value (str)
         dfstate = self.state_contributions_from_term(termlabel=termlabel, thr=-np.inf)
-        cols = ['E', 'cm-1', 'Ω', 'label', 'exc', 'g', 'Olbl']
+        if cols is None:
+            # use default
+            cols = ['E', 'cm-1', 'Ω', 'label', 'exc', 'g', 'Olbl']
         df = self.dfso[cols].copy()
         term = dfstate.columns.tolist()[-1]
         #iterm = self.dfterm.index[self.dfterm.Term == term][0]
