@@ -457,11 +457,23 @@ class MRCI:
         self.irrep = x[0]
         self.spinLabel = x[1]
         self.ncore = x[2]
+        self.S = chem.MULTSPIN[x[1]]
         #self.nact = x[3]
         self.results = self.properties()
+        self.nstate = len(self.results)
         self.configs = self.config_coeffs()
+        self.record = self.record_number()
     def printlines(self):
         print('\n'.join(self.lines))
+    def record_number(self):
+        # Return record number where wfn is saved, else None
+        recno = None
+        re_rec = re.compile(r'\s*Wavefunction saved on\s+(\d+\.\d)')
+        for line in self.lines:
+            m = re_rec.match(line)
+            if m:
+                recno = m.group(1)
+        return recno
     def basics(self):
         # get irrep, spin and electron counts
         rx_sym = re.compile(r' Reference symmetry:\s+(\d)\s+(\w+)')
@@ -3103,6 +3115,8 @@ def combineMRCI(MRCIlist):
     for i, ci in enumerate(MRCIlist):
         d = ci.results.copy()
         d.insert(0, 'Group', i+1)
+        if ci.record is not None:
+            d['record'] = ci.record
         dtemp.append(d)
     df = pd.concat(dtemp, ignore_index=True)
     return df
@@ -3544,7 +3558,7 @@ def parse_SOmatrix(buf, dimen):
     basisOK = (len(set(basis)) == dimen)
     if not basisOK:
         # there is a labeling error
-        s = '{:d} SO states but only {:d} unique basis states'.format(dimen,len(set(basis)))
+        s = '{:d} SO states but only {:d} unique basis state labels'.format(dimen,len(set(basis)))
         chem.print_err('', s, halt=False)
     return mat, basis, basisOK
 ##
