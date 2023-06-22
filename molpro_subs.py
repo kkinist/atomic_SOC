@@ -3144,7 +3144,8 @@ def average_SO_levels(dfdups, be_close='E', tol=1.e-5, be_same=['Ω', 'term', 'l
             d = grp.copy()
             d['g'] = 1  # degeneracy = 1
             if 'Nr' in d.columns:
-                d.Nr.iloc[0] = [list(d.Nr)]
+                #d.Nr.iloc[0] = [list(d.Nr)]
+                d.Nr = [[n] for n in d.Nr]
             df = pd.concat([df, d], ignore_index=False)
         else:
             # doubly degenerate; group into pairs
@@ -3162,7 +3163,7 @@ def average_SO_levels(dfdups, be_close='E', tol=1.e-5, be_same=['Ω', 'term', 'l
                 if diff > tol:
                     s = 'Difference in {:s} of {:.1e} exceeds desired tolerance of {:.1e} for this pair:'
                     print(s.format(be_close, diff, tol))
-                    print(d)
+                    chem.displayDF(d)
                 #df.loc[len(df)] = row
                 df = pd.concat([df, row])
     df['g'] = df.g.astype(int)
