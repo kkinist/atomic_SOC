@@ -6964,6 +6964,26 @@ def possible_J_from_term(term):
     jvals = np.arange(abs(L - S), L+S+1)
     return np.round(jvals, 1)
 ##
+def possible_J_from_ASD_label(lbl):
+    # Given a standard term symbol or a symbol like '2[9/2]',
+    #   return a list of possible values of J
+    try:
+        jvals = possible_J_from_term(lbl)
+    except:
+        # non-standard label
+        jvals = []
+        regex = re.compile('(\d)\[(\d+(?:/2))\]')
+        m = regex.search(lbl)
+        if m:
+            smult = int(m.group(1))
+            jpart = halves_to_float(m.group(2))
+            s = (smult - 1)/2
+            for m in np.arange(-s, s+0.1):
+                jvals.append(jpart + m)
+        else:
+            print_err('', f'not recognized as an ASD term label: {lbl}')
+    return jvals
+##
 def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
                      stick_color='b', conv_color='red', 
                      conv_alpha=0.2, figsize=None,
@@ -7357,8 +7377,9 @@ def print_dict(d, nindent=0, sort=False):
             print(spre + vstr)
     return
 ##
-def halves_to_float(jstring):
+def halves_to_float(jstr):
     # given a string like ' 2' or ' 3 /2', return the corresponding float
+    jstring = str(jstr)  # ensure it is string
     if '/' in jstring:
         words = jstring.split('/')
         j = float(words[0]) / float(words[1])

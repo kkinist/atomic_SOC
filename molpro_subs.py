@@ -64,14 +64,14 @@ class MULTI:
         # the number of active orbitals
         # if irreps==True, instead of an integer return the irrep list
         rx = re.compile(r' Number of active  orbitals:\s+(\d+) ')
-        rx_irr = re.compile(r'\((\s+\d)+\s*\)')
+        rx_irr = re.compile(r'\(((?:\s+\d)+)\s*\)')
         for line in self.lines:
             m = rx.match(line)
             if m:
                 if irreps:
-                    m = rx_irr.search(line)
-                    words = m.group(0).split()
-                    return [int(n) for n in words[1:-1]]
+                    m2 = rx_irr.search(line)
+                    words = m2.group(1).split()
+                    return [int(n) for n in words]
                 else:
                     return int(m.group(1))
         return None
@@ -214,12 +214,19 @@ class MULTI:
         orb = []  # orbital label, e.g. '3.1'
         occ = []  # occupation 
         e = []    # energy
+        # composition as list of tuples: (center, type#, type, coeff)
+        #   for an atom, tuples are (Mu?, type, coeff)
         comp = []  # composition as list of tuples: (center, type#, type, coeff)
         terse = [] # concise description
         irrep = []  # irrep number
         inNO = False
+        isatom = True
+        nfield = 3  # size of tuples
         for line in self.lines:
             if inNO:
+                if 'Cen' in line:
+                    isatom = False
+                    nfield = 4
                 if rx_data.match(line):
                     # extract the data
                     words = line.split()
@@ -230,11 +237,14 @@ class MULTI:
                     # compositions remain
                     c = []
                     while words:
-                        if len(words) % 4:
+                        if len(words) % nfield:
                             # number of fields does not make sense
-                            chem.print_err('', 'Composition fields not a multiple of 4: {:d}'.format(len(words)))
-                        c.append((int(words[0]), int(words[1]), words[2], float(words[3])))
-                        words = words[4:]
+                            chem.print_err('', f'Composition fields not a multiple of {nfield}: {len(words)}')
+                        if isatom:
+                            c.append((int(words[0]), -1, words[1], float(words[2])))
+                        else:
+                            c.append((int(words[0]), int(words[1]), words[2], float(words[3])))
+                        words = words[nfield:]
                     comp.append(c)
                     # create concise description of this orbital
                     ac = np.array([abs(x[3]) for x in c])
@@ -663,6 +673,13 @@ class MRCI:
         hasR = 'R' in dfcas  # whether bond length is present
         for i, row in self.results.iterrows():
             crow = subdf[(subdf.Label == row.Ref)]
+            if len(crow) < 1:
+                print(f'No CASSCF state from which to transfer Lz for MRCI {row.Label} {row.Spin}')
+                lz.append(-1)
+                if atom:
+                    Llist.append(-1)
+                term.append('?')
+                continue
             if hasR:
                 r.append(crow.R.values[0])
             if abs(row.Eref - crow.Energy.values[0]) < etol:
@@ -2914,12 +2931,13 @@ def read_coordinates(fname, linenum=False):
     # return a DataFrame of coordinates
     # return a list of DF if there are multiple coordinates
     # If linenum == True, also return a list of corresponding line numbers
+    # Include "CHARGE" in the DF
     rx_coord = re.compile('ATOMIC COORDINATES')
     rx_data = re.compile(r'^\s*\d+\s+[A-Z]+\s+\d+\.\d\d\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+')
     rx_blank = re.compile('^\s*$')
     dflist = []
     lineno = []
-    cols = ['Z', 'x', 'y', 'z']
+    cols = ['Z', 'q', 'x', 'y', 'z']
     incoord = False
     with open(fname, 'r', errors='replace') as F:
         for lno, line in enumerate(F):
@@ -2929,7 +2947,7 @@ def read_coordinates(fname, linenum=False):
                     dflist.append(df)
                 if rx_data.match(line):
                     w = line.split()
-                    row = [w[1], float(w[3]), float(w[4]), float(w[5])]
+                    row = [w[1], float(w[2]), float(w[3]), float(w[4]), float(w[5])]
                     df.loc[len(df)] = row
             else:
                 if rx_coord.search(line):
@@ -3310,11 +3328,14 @@ def averageTermsApprox(dfci, be_close=None, target=None, be_same=None,
             rowdiff = subdf[be_close].max() - subdf[be_close].min()
             exceeds = (rowdiff > wishes)
             if exceeds.any() and not quiet:
-                for col in be_same:
-                    rowdiff[col] = '--'
+                for icol, col in enumerate(be_same):
+                    if icol == 0:
+                        rowdiff[col] = '(spread)'
+                    else:
+                        rowdiff[col] = '--'
                 subdf = pd.concat([subdf, rowdiff.to_frame().T], ignore_index=True)
                 #subdf = subdf.append(rowdiff, ignore_index=True)
-                print('large non-degeneracies in term energies:')
+                print('Large non-degeneracies in term energies:')
                 chem.displayDF(subdf)
             newrow = pd.concat((subdf.iloc[0][be_same], rowavg, pd.Series({'idx': idx})))
             dfret.loc[len(dfret)] = newrow
@@ -3356,6 +3377,7 @@ def readSOenergy(fname, recalc=False, linenum=False):
                 inso = True
                 sobuf = [line.rstrip()]
                 lineno.append(lno)
+                E0 = None
     if recalc:
         for so in retlist:
             so.recalc_wavenumbers()
@@ -4803,12 +4825,15 @@ def assign_Omega_valuesXXX(mrci, SObasis, vals, vecsq, csq_thresh=0.0001, silent
     dffinal['exc'] = dffinal['cm-1'] - min(dffinal['cm-1'])
     return dffinal
 ##
-def total_charge(fpro):
+def total_charge(fpro, verbose=False):
     # MOLPRO does not report total charge; compute it here from atomic 
-    # numbers and (last) electron count
+    # charges and (last) electron count
     coord = read_coordinates(fpro)
     Geom = chem.Geometry(coord, intype='DataFrame')
-    ztot = Geom.Ztot()
+    ztot = Geom.Ztot()  # based upon atomic number
+    qtot = coord.q.sum()  # based upon reported atomic charges (ECP effect)
+    if (qtot != ztot) and verbose:
+        print(f'--- ECP replaces {ztot - qtot:.0f} nuclear charges ---')
     # get the last report of total electron count
     rx_nelec = re.compile(r'^\s*Number of electrons:', re.IGNORECASE)
     with open(fpro) as F:
@@ -4820,7 +4845,7 @@ def total_charge(fpro):
                     nelec = int(words[0][:-1]) + int(words[1][:-1])
                 else:
                     nelec = int(words[0])
-    Q = ztot - nelec            
+    Q = qtot - nelec            
     return Q
 ##
 def stoichiometry(fpro, ones=False, charge=True):
