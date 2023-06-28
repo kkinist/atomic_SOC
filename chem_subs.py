@@ -223,7 +223,10 @@ def weighted_mean(values, weights, formula='Cochran', normalize=False):
     wbar = w.mean()
     v = np.array(values)
     mu = (w * v).sum() / wsum
-    A = n / (n-1) / wsum**2
+    if n > 1:
+        A = n / (n-1) / wsum**2
+    else:
+        A = 0
     if formula == 'Cochran':
         # use my algebraic simplification of the formula in Gatz and Smith
         vdiff = v - mu
@@ -252,6 +255,8 @@ def weighted_mean(values, weights, formula='Cochran', normalize=False):
         SEMw = np.sqrt(S / B)
     else:
         print_err('', 'Unrecognized formula = {:s}'.format(formula))
+    if n < 2:
+        SEMw = -1  # to flag meaningless stdev of one number
     return mu, SEMw
 ##
 def relstdvar(data):
@@ -6515,6 +6520,36 @@ def enumerative_prefix(labels, always=False, style='numeric'):
                 retval[j] = pref + str(lbl)
                 i += 1
     return retval
+##
+def strip_enumerative_prefix(label):
+    # Given one label, return it with any enumerative prefixes removed
+    # prefixes may be numeric or alpha
+    rx = re.compile('(?:\(\d+\))?(\d+.+)')
+    m = rx.match(label)
+    if m:
+        return m.group(1)
+    else:
+        print_err('', f'Failed to parse label "{label}"', halt=False)
+        # return the label unchanged
+        return label
+    return None
+##
+def update_enumerative_prefix(labels, always=False, style='numeric'):
+    #  Given a list of modified labels from enumerative_prefix(), update
+    #    the prefixes to reflect a new ordering (as in 'labels')
+    uniql = []  # unique elements of 'labels', in order
+    for lbl in labels:
+        if lbl not in uniql:
+            uniql.append(lbl)
+    # make corresponding list without prefixes
+    plainl = [strip_enumerative_prefix(lbl) for lbl in uniql]
+    newlbls = enumerative_prefix(plainl, always=always, style=style)
+    # create the full list (with repeats)
+    renum = []
+    for old in labels:
+        i = uniql.index(old)
+        renum.append(newlbls[i])
+    return renum
 ##
 def renumber_water_cluster(G, Gref, dipvec, dipref, ang_thresh=0.02,
                            dip_thresh=0.03, dist_thresh=0.1):
