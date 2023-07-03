@@ -7076,6 +7076,57 @@ def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
     plt.xlim([xmin, xmax])
     plt.show()
     return
+##
+def plot_broadened_sticks(Xin, Yin, xlabel, ylabel, xmin=None, xmax=None, fwhm=0,
+                     stick_color='b', conv_color='red',
+                     conv_alpha=0.2, figsize=None,
+                     xlbl = 0.05, ylbl = 0.8, title=''):
+    '''
+    Plot a stick spectrum along with Gaussian convolution
+    Args:
+        Xin, Yin: data
+        xlabel, ylabel: axis labels
+        xmin: lower limit to plot
+        xmax: upper limit
+        fwhm: for Gaussian convolution
+    Return x, y from the convolution
+    '''
+    # make numpy arrays
+    X = np.array(Xin)
+    Y = np.array(Yin)
+    # plot limits
+    if xmin is None:
+        xmin = min(X) - 3 * fwhm
+    if xmax is None:
+        xmax = max(X) + 3 * fwhm
+    if fwhm == 0:
+        # expand horizontal range so sticks are not hidden by vertical axes
+        d = 0.03 * (xmax - xmin)
+        xmax += d
+        xmin -= d
+    
+    # figure size
+    if figsize is None:
+        figsize = (8, 4)
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    idx = np.argwhere( (X >= xmin) & (X <= xmax) )
+    ax.stem(X[idx], Y[idx], linefmt=stick_color+'-', markerfmt=' ', basefmt=' ')
+    if fwhm:
+        # convolve with a gaussian
+        xc, yc = convolve_peakshape(X, Y, fwhm)
+        idx = np.argwhere( (xc >= xmin) & (xc <= xmax) )
+        x = xc[idx].flatten()
+        y = yc[idx].flatten()
+        ax.plot(x, y, color=conv_color, alpha=conv_alpha)
+        ax.fill_between(x, y, color=conv_color, alpha=conv_alpha)
+    plt.xlim([xmin, xmax])
+    plt.ylim(bottom=0)
+    plt.title(title)
+    plt.show()
+    return xc, yc
+##
 def read_NIST_AEL_csv(file, simple_config=False, bare_term=False,
                       show_limit=False, max_termE=np.inf):
     '''
