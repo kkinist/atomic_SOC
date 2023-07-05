@@ -2937,7 +2937,7 @@ def read_coordinates(fname, linenum=False):
     rx_blank = re.compile('^\s*$')
     dflist = []
     lineno = []
-    cols = ['Z', 'q', 'x', 'y', 'z']
+    cols = ['Z', 'x', 'y', 'z', 'q']  # keep Zxyz as first four 
     incoord = False
     with open(fname, 'r', errors='replace') as F:
         for lno, line in enumerate(F):
@@ -2947,7 +2947,7 @@ def read_coordinates(fname, linenum=False):
                     dflist.append(df)
                 if rx_data.match(line):
                     w = line.split()
-                    row = [w[1], float(w[2]), float(w[3]), float(w[4]), float(w[5])]
+                    row = [w[1], float(w[3]), float(w[4]), float(w[5]), float(w[2])]
                     df.loc[len(df)] = row
             else:
                 if rx_coord.search(line):
