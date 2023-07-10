@@ -7476,9 +7476,9 @@ def halves_to_float(jstr):
     return j/2
 ##
 def ordinal_halves_to_float(njstring):
-    # given a string like '(2)2' or '(1)1/2', return a string with
+    # given a string like '(2)2' or '(1)1/2' or '(7)0+', return a string with
     #   fraction converted to decimal
-    regex = re.compile(r'(?:\(\d+\))?(.+)')
+    regex = re.compile(r'(?:\(\d+\))?([/\d]+)')
     m = regex.match(njstring)
     sfrac = m.group(1)
     sfloat = njstring.replace(sfrac, str(halves_to_float(sfrac)))

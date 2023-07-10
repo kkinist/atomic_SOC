@@ -3139,7 +3139,7 @@ def combineMRCI(MRCIlist):
     df = pd.concat(dtemp, ignore_index=True)
     return df
 ##
-def average_SO_levels(dfdups, be_close='E', tol=1.e-5, be_same=['Ω', 'term', 'label'],
+def average_SO_levels(dfdups, be_close='E', tol=2.e-5, be_same=['Ω', 'term', 'label'],
                         to_avg = ['E', 'cm-1', 'exc']):
     '''
     Identify degenerate spin-orbit levels (differences in column 'be_close' less than 'tol')
