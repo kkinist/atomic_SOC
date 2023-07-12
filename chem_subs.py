@@ -6924,6 +6924,60 @@ def omega_possible_from_term(term):
     omposs = set(np.abs(np.arange(L-S, L+S+0.1)))
     return omposs
 ##
+def possible_J_from_term(term):
+    # given a term symbol like '(1)1D', return a list of
+    # possible values of J
+    S, L = SL_from_term(term)
+    #jvals = [abs(L - ms) for ms in np.arange(-S, S+1)]   wrong!
+    jvals = np.arange(abs(L - S), L+S+1)
+    return np.round(jvals, 1)
+##
+def possible_J_from_ASD_label(lbl):
+    # Given a standard term symbol or a symbol like '2[9/2]',
+    #   return a list of possible values of J
+    try:
+        jvals = possible_J_from_term(lbl)
+    except:
+        # non-standard label
+        jvals = []
+        regex = re.compile('(\d)\[(\d+(?:/2))\]')
+        m = regex.search(lbl)
+        if m:
+            smult = int(m.group(1))
+            jpart = halves_to_float(m.group(2))
+            s = (smult - 1)/2
+            for m in np.arange(-s, s+0.1):
+                jvals.append(jpart + m)
+        else:
+            print_err('', f'not recognized as an ASD term label: {lbl}')
+    return jvals
+##
+def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
+                              always=False):
+    '''
+    Assign unique, enumerative labels to experimental terms
+    
+    'dfexpt' is a DataFrame ultimately from NIST ASD
+     dfexpt must have columns "Configuration", "Term", "J"
+        and an energy column labeled "Level (cm-1)"
+     Return a new DataFrame with added column 'newcol'
+     Accept both standard term symbols and symbols like "2[5/2]"
+    '''
+    dfret = dfexpt.copy()
+    Ecol = "Level (cm-1)"
+    # Get the unique combinations of (Configuration, Term), ordered by energy
+    uniqlbl = []
+    oldterm = []
+    for i, row in dfexpt.sort_values(Ecol).iterrows():
+        lbl = (row.Configuration, row.Term)
+        if lbl not in uniqlbl:
+            uniqlbl.append(lbl)
+            oldterm.append(lbl[1])
+    newsymb = enumerative_prefix(oldterm, always=always)
+    smap = {lbl: new for lbl, new in zip(uniqlbl, newsymb)}
+    dfret['uTerm'] = [smap[lbl] for lbl in zip(dfexpt.Configuration, dfexpt.Term)]
+    return dfret
+##
 def SL_from_term(term):
     # given a term symbol like '(1)1D' or 'a 3D*', return the values of S and L
     # in diatomic (linear) case, return S and Lambda and parity
@@ -6990,34 +7044,6 @@ def term_degeneracy(term):
         ldegen = 2*L + 1
     degen = int(np.round(sdegen * ldegen))
     return degen
-##
-def possible_J_from_term(term):
-    # given a term symbol like '(1)1D', return a list of
-    # possible values of J
-    S, L = SL_from_term(term)
-    #jvals = [abs(L - ms) for ms in np.arange(-S, S+1)]   wrong!
-    jvals = np.arange(abs(L - S), L+S+1)
-    return np.round(jvals, 1)
-##
-def possible_J_from_ASD_label(lbl):
-    # Given a standard term symbol or a symbol like '2[9/2]',
-    #   return a list of possible values of J
-    try:
-        jvals = possible_J_from_term(lbl)
-    except:
-        # non-standard label
-        jvals = []
-        regex = re.compile('(\d)\[(\d+(?:/2))\]')
-        m = regex.search(lbl)
-        if m:
-            smult = int(m.group(1))
-            jpart = halves_to_float(m.group(2))
-            s = (smult - 1)/2
-            for m in np.arange(-s, s+0.1):
-                jvals.append(jpart + m)
-        else:
-            print_err('', f'not recognized as an ASD term label: {lbl}')
-    return jvals
 ##
 def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
                      stick_color='b', conv_color='red', 
@@ -7399,6 +7425,7 @@ def average_degenerate(vals, tol, chain=True):
         avg.append(np.mean(a[idx]))
     return avg, idxl
 ##
+
 ############################################################
 ##
 ## general utility functions

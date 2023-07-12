@@ -1537,7 +1537,7 @@ class fullmatSOCI:
         self.sob_ici = sob_ici
         self.ci_iso = ci_iso
         return
-    def average_terms(self, cols = ['Term', 'dipZ', 'Edav', 'idx'], 
+    def average_terms(self, cols=['Term', 'dipZ', 'Edav', 'idx'], 
                       be_close=None, quiet=False, atom=False, always=False):
         # Average pairs of MRCI states into terms, keeping only columns 'cols'
         # Also map basis states to terms
