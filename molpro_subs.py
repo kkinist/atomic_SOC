@@ -4825,6 +4825,88 @@ def assign_Omega_valuesXXX(mrci, SObasis, vals, vecsq, csq_thresh=0.0001, silent
     dffinal['exc'] = dffinal['cm-1'] - min(dffinal['cm-1'])
     return dffinal
 ##
+def read_Molpro_matrix(fname,
+                       title='Property matrix of the LZ operator in a.u.', 
+                       ending='Expectation values',
+                       leader="Nr Sym / Nr. ",
+                       re_string=r'(\d+)\s+(\d+)',
+                       complex_val=True, pretitle=''):
+    '''
+    Read a square matrix in the style printed by Molpro
+      'fname' is the name of a Molpro output file
+      'title' is the string that identifies the matrix to be read
+      'ending' is a string that occurs immediately after the matrix
+      'leader' is the string that precedes the column numbers
+      're_string' is a regular expression that identifies a data line
+      'complex_val' indicates whether a "row" is one or two rows of output
+      'pretitle' identifies the major section; nothing before this string will be considered
+    Return:
+      the matrix
+      a list of lists of the row labels (capture groups in 're_string')
+    '''
+    print(f'Reading matrix called "{title}"')
+    rx_hdr = re.compile(leader + r'((?:\s+\d+)+)')
+    rx_data = re.compile(re_string + r'((?:\s+[-]?\d+\.\d+)+)')
+    n_row_descr = rx_data.groups - 1
+    row_lbl = []
+    for i in range(n_row_descr):
+        row_lbl.append([])
+    # make a list of relevant lines
+    linebuf = []
+    prelude = False
+    inblock = False
+    with open(fname) as F:
+        for line in F:
+            if not prelude:
+                if pretitle in line:
+                    prelude = True
+                continue
+            # past the pre-title
+            if not inblock:
+                if title in line:
+                    inblock = True
+                continue
+            # in the block
+            if ending in line:
+                # past the block
+                break
+            linebuf.append(line)
+    # get the size of the matrix
+    dimen = 0
+    for line in linebuf:
+        m = rx_hdr.search(line)
+        if m:
+            cols = [int(x) for x in m.group(1).split()]
+            dimen = max(dimen, max(cols))
+    if complex_val:
+        matrix = np.zeros((dimen, dimen), dtype=complex)
+    else:
+        matrix = np.zeros((dimen, dimen))
+    # read the matrix
+    for iline in range(len(linebuf)):
+        line = linebuf[iline]
+        m = rx_hdr.search(line)
+        if m:
+            cols = [int(x) for x in m.group(1).split()]
+            irow = 0
+        m = rx_data.search(line)
+        if m:
+            #print(line.rstrip())
+            for i in range(n_row_descr):
+                row_lbl[i].append(m.group(i + 1))
+            nums = m.group(n_row_descr + 1).split()
+            for i, col in enumerate(cols):
+                icol = col - 1
+                matrix[irow, icol] += float(nums[i])
+            if complex_val:
+                #print(linebuf[iline+1].rstrip())
+                nums = linebuf[iline+1].split()
+                for i, col in enumerate(cols):
+                    icol = col - 1
+                    matrix[irow, icol] += float(nums[i]) * 1j
+            irow += 1
+    return matrix, row_lbl
+##
 def total_charge(fpro, verbose=False):
     # MOLPRO does not report total charge; compute it here from atomic 
     # charges and (last) electron count

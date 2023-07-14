@@ -7241,13 +7241,17 @@ def rot_consts_PtH_fitting(Jvec, Evec, omega, nrot=4):
     # 'nrot' is the number of plain constants to include, of [Bv, Dv, Hv, Lv]
     jvec = np.array(Jvec)
     evec = np.array(Evec)
+    # discard any NaN energies
     idx = np.argwhere(~np.isnan(evec))
     jvec = jvec[idx].flatten()
     evec = evec[idx].flatten()
+    nval = len(evec)
+    if nval == 1:
+        print('*** cannot fit constants to just one energy ')
+        return None
     if min(jvec) < omega:
         s = 'Lowest J = {:.3f} < Omega = {:.3f}'.format(min(jvec), omega)
         print_err('', s)
-    #print('>>>shapes: jvec =', jvec.shape, 'evec =', evec.shape)
     xvec = jvec * (jvec + 1) - omega**2
     # parameter vector is Pvec = [nrot, Tv, Bv, Dv, Hv, Lv],
     #   although not all of them might be present
