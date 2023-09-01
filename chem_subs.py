@@ -1,7 +1,12 @@
 # Routines for general quantum chemistry (no particular software package)
 # Python3 and pandas
 # Karl Irikura 
-#
+
+# suppress annoying warning
+from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
+import warnings
+warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
+
 import re, sys
 #import string, copy
 import copy
@@ -5337,6 +5342,8 @@ def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
             print_err('', 'potential has more than one minimum')
         Epot = ymin[0]
         Rpot = xmin[0]
+    if not silent:
+        print(f'\tMinimum in raw potential at R = {Rpot*BOHR:.5f} Å with E = {Epot:.6f}')
     EvJ = np.zeros((nv, nN))
     eigvecs = np.zeros((nv, nN)).tolist()
     for Nrot in range(nN):
@@ -5373,6 +5380,10 @@ def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
         EvJ[:,Nrot] = cvals[:nv]
         for i in range(nv):
             eigvecs[i][Nrot] = cvecs[:, i]
+    if not silent:
+        lev0 = EvJ.min()
+        zpecm = (lev0 - Epot) * AU2CM
+        print(f'\tLowest level at E = {lev0:.6f} so ZPE = {zpecm:.2f} cm-1')
     # convert energy levels to cm**-1
     if ref == 'phys':
         Emin = Ephys
@@ -7583,7 +7594,7 @@ def term_from_Latin(lbl):
         grk = grk + c
     return grk
 ##
-def displayDF(df, maxrows=0):
+def displayDF(df, maxrows=0, fmt=None):
     # try to "display" a DataFrame
     # or just print it
     try:
@@ -7592,7 +7603,7 @@ def displayDF(df, maxrows=0):
             with pd.option_context('display.max_rows', maxrows):
                 display(df)
         else:
-            display(df)
+            display(df.style.format(fmt))
     except NameError: 
         print(df)
     return

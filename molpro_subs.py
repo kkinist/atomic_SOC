@@ -1,7 +1,12 @@
 # routines for use with MOLPRO 2012 files
 # 5/28/2020 KKI start
 # slowly update for MOLPRO 2021
-#
+
+# suppress annoying warning
+from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
+import warnings
+warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
+
 import re, sys
 import pandas as pd
 import numpy as np
@@ -4929,6 +4934,17 @@ def total_charge(fpro, verbose=False):
                     nelec = int(words[0])
     Q = qtot - nelec            
     return Q
+##
+def Ztot(fpro):
+    # Return the total nuclear charge as reported
+    with open(fpro, 'r') as F:
+        for line in F:
+            if ' NUCLEAR CHARGE: ' in line:
+                w = line.split()
+                ztot = int(w[-1])
+                return ztot
+    # did not find it
+    return None
 ##
 def stoichiometry(fpro, ones=False, charge=True):
     # return a stoichiometry string
