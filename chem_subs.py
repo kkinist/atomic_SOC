@@ -7,7 +7,7 @@ from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWa
 import warnings
 warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
 
-import re, sys
+import re, sys, os, subprocess
 #import string, copy
 import copy
 import numpy as np
@@ -21,7 +21,9 @@ import scipy.stats
 import matplotlib.pyplot as plt
 from urllib.request import urlopen
 from urllib.parse import quote
-#
+
+Avogadro_viewer = r"C:\Program Files (x86)\Avogadro\bin\avogadro.exe"
+
 # CODATA 2018 constants from physics.nist.gov, retrieved 7/13/2020
 AVOGADRO = 6.02214076e23     # mol^-1 (exact, defined value)
 BOLTZMANN = 1.380649e-23       # J/K (exact, defined value)
@@ -1960,7 +1962,7 @@ class Geometry(object):
         return idx
     def find_element(self, el):
         # old, redundant
-        print('>>> this method (find_element) is old and redundant')
+        print('>>> this method (find_element) is superseded by element_indices')
         return self.element_indices(el)
     def randomize_atom_numbering(self):
         # re-number atoms randomly; may be useful for software testing
@@ -2320,6 +2322,15 @@ def minimize_RMSD_rotation(G, Gref):
                 # print to stdout
                 print(self.XmolXYZ(comment=comment))
         return
+    def Avogadro(self):
+        # Launch Avogadro in a new window to display structure
+        if not os.path.isfile(Avogadro_viewer):
+            print_err('', f'{Avogadro_viewer} program not found')
+        tmpxyz = 'tempjunk.xyz'
+        self.printXYZ(tmpxyz, comment='temporary file for vewing by Avogadro')
+        subprocess.run([Avogadro_viewer, tmpxyz])
+        os.remove(tmpxyz)
+        return
     def printMOL(self, fname, title=''):
         # write an MDL MOL file
         molstr = self.to_MOL(title=title)
@@ -2570,6 +2581,340 @@ def minimize_RMSD_rotation(G, Gref):
                         # a methyl group; add to list
                         mlist.append( (i, *hlist) )
         return mlist
+    def find_methyl(self, bondtol=1.3):
+        # just an alias
+        return self.find_methyls(bondtol)
+    def find_nitro(self, bondtol=1.3):
+        # Find (terminal) NO2 groups
+        # return list of tuples of atom numbers (N, O, O)
+        # find terminal oxygen atoms
+        oxterm = []  # indices of terminal O
+        nidx = []  # indices of N with terminality == 1
+        elems = [a.el for a in self.atom]
+        try:
+            terms = self.terminality
+        except AttributeError:
+            terms = self.assignTerminality(bondtol)
+        for i, (el, term) in enumerate(zip(elems, terms)):
+            if (el == 'O') and (term == 0):
+                oxterm.append(i)
+            if (el == 'N') and (term == 1):
+                nidx.append(i)
+        if (len(oxterm) < 2) or (len(nidx) < 1):
+            # impossible
+            return []
+        # any -NO2 groups?
+        grplist = []
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for iN in nidx:
+            if sum(connex[iN,:]) > 3:
+                # too many bonds, cannot be a normal nitro
+                continue
+            bondO = [i for i in oxterm if connex[iN, i]]
+            if len(bondO) == 2:
+                grplist.append((iN, *bondO))
+        return grplist
+    def find_nitrosyl(self, bondtol=1.3):
+        # Find (terminal) -NO groups that are not nitrites
+        # return list of tuples of atom numbers (N, O)
+        # first find terminal oxygen atoms
+        oxterm = []  # indices of terminal O
+        nidx = []  # indices of N with terminality == 1
+        elems = [a.el for a in self.atom]
+        try:
+            terms = self.terminality
+        except AttributeError:
+            terms = self.assignTerminality(bondtol)
+        for i, (el, term) in enumerate(zip(elems, terms)):
+            if (el == 'O') and (term == 0):
+                oxterm.append(i)
+            if (el == 'N') and (term == 1):
+                nidx.append(i)
+        if (len(oxterm) < 1) or (len(nidx) < 1):
+            # impossible
+            return []
+        # any -NO groups?
+        grplist = []
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for iN in nidx:
+            if sum(connex[iN,:]) > 2:
+                # too many bonds, cannot be a normal nitroso
+                continue
+            bondO = [i for i in oxterm if connex[iN, i]]
+            if len(bondO) == 1:
+                grplist.append((iN, *bondO))
+        return grplist
+    def find_nitrite(self, bondtol=1.3):
+        # Find (terminal) -ONO groups
+        # return list of tuples of atom numbers (O, N, O)
+        # find terminal oxygen atoms
+        oxterm = []  # indices of terminal O
+        oxint = []   # indices of O with terminality = 1 or 2
+        nidx = []  # indices of N with terminality == 1
+        elems = [a.el for a in self.atom]
+        try:
+            terms = self.terminality
+        except AttributeError:
+            terms = self.assignTerminality(bondtol)
+        for i, (el, term) in enumerate(zip(elems, terms)):
+            if el == 'O':
+                if term == 0:
+                    oxterm.append(i)
+                elif term in [1, 2]:
+                    oxint.append(i)
+            if (el == 'N') and (term == 1):
+                nidx.append(i)
+        if (len(oxterm) < 1) or (len(nidx) < 1) or (len(oxint) < 1):
+            # impossible
+            return []
+        # any -ONO groups?
+        grplist = []
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for iN in nidx:
+            if sum(connex[iN,:]) > 2:
+                # too many bonds, cannot be a normal nitroso
+                continue
+            bondO = [i for i in oxterm if connex[iN, i]]
+            bondI = [i for i in oxint if connex[iN, i]]
+            if (len(bondO) == 1) and (len(bondI) == 1):
+                grplist.append((bondI[0], iN, bondO[0]))
+        return grplist
+    def find_benzene_rings(self, bondtol=1.3):
+        # Return list of 6-tuples of atom numbers
+        arlist = []  # list to be returned
+        atypes = np.array(self.Benson_atom_type(tol=bondtol))
+        idx = np.argwhere(atypes == 'Cb').flatten()
+        # idx is an array of the indices of all aromatic carbons
+        if len(idx) < 6:
+            # impossible
+            return arlist
+        idxset = set(idx)
+        rings = self.rings()
+        for ring in rings:
+            if len(ring) != 6:
+                continue
+            # 'ring' is a 6-tuple of atom numbers/indices
+            if set(ring).issubset(idxset):
+                # a ring of 6 aromatic carbons
+                arlist.append(tuple(ring))
+        return arlist
+    def find_carbonyl(self, bondtol=1.3):
+        # Return list of duples of (C, O) atom numbers
+        btyp = np.array(self.Benson_atom_type(detail=2))
+        pairlist = []
+        idxco = np.argwhere(btyp == 'CO').flatten()
+        if len(idxco) < 1:
+            # impossible
+            return pairlist
+        idxoc = np.argwhere(btyp == '_CO').flatten()
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for i in idxco:
+            for j in idxoc:
+                if connex[i, j]:
+                    pairlist.append((i, j))
+        return pairlist
+    def find_COC(self, bondtol=1.3):
+        # Return list of triples of (C, O, C) atom numbers
+        # This is not really a functional group; could 
+        #   be ether, ester, anhydride
+        oidx = []  # indices of non-terminal O
+        cidx = []  # indices of C
+        elems = [a.el for a in self.atom]
+        try:
+            terms = self.terminality
+        except AttributeError:
+            terms = self.assignTerminality(bondtol)
+        for i, (el, term) in enumerate(zip(elems, terms)):
+            if (el == 'O') and (term != 0):
+                oidx.append(i)
+            if (el == 'C'):
+                cidx.append(i)
+        if (len(oidx) < 1) or (len(cidx) < 2):
+            # impossible
+            return []
+        # any C-O-C moieties?
+        grplist = []
+        cset = set(cidx)
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for iO in oidx:
+            bonded = np.argwhere(connex[iO, :]).flatten()
+            if len(cset.intersection(bonded)) == 2:
+                grplist.append((bonded[0], iO, bonded[1]))
+        return grplist
+    def find_ethestanh(self, choice, bondtol=1.3):
+        # Return list of triples of (C, O, C) atom numbers
+        #   choices: ['ether', 'ester', 'anhydride']
+        if choice not in ['ether', 'ester', 'anhydride']:
+            print_err('', f'Unknown choice = {choice}')
+        grplist = []
+        coclist = self.find_COC(bondtol=bondtol)
+        if len(coclist) < 1:
+            return grplist
+        COlist = [co[0] for co in self.find_carbonyl(bondtol=bondtol)]
+        # COlist is list of carbonyl C atom indices
+        if len(COlist) < 1:
+            # call them all 'ether'
+            if choice == 'ether':
+                return coclist
+            else:
+                # no esters or anhydrides
+                return grplist
+        # there is at least one carbonyl
+        for coc in coclist:
+            nCO = 0
+            for iC in [coc[0], coc[2]]:
+                if iC in COlist:
+                    nCO += 1
+            if (nCO == 1) and (choice=='ester'):
+                grplist.append(coc)
+            if (nCO == 2) and (choice=='anhydride'):
+                grplist.append(coc)
+        return grplist
+    def find_OH(self, bondtol=1.3):
+        # Return list of duples of (O, H) atom numbers
+        grplist = []
+        oidx = []  # indices of O
+        hidx = []  # indices of H (assumed terminal)
+        elems = [a.el for a in self.atom]
+        for i, el in enumerate(elems):
+            if el == 'O':
+                oidx.append(i)
+            if el == 'H':
+                hidx.append(i)
+        if (len(oidx) < 1) or (len(hidx) < 1):
+            # impossible
+            return []
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for i in oidx:
+            for j in hidx:
+                if connex[i, j]:
+                    grplist.append((i, j))
+        return grplist
+    def find_aldket(self, choice, bondtol=1.3):
+        # Return list of tuples of atom numbers
+        #   (C, C, O, C) for ketone and (C, C, O, H) for aldehyde
+        #   choices: ['ketone', 'aldehyde']
+        if choice not in ['ketone', 'aldehyde']:
+            print_err('', f'Unknown choice = {choice}')
+        grplist = []
+        COlist = self.find_carbonyl(bondtol=bondtol)
+        if len(COlist) < 1:
+            # impossible
+            return grplist
+        cidx = []  # indices of C
+        hidx = []  # indices of H
+        elems = [a.el for a in self.atom]
+        for i, el in enumerate(elems):
+            if el == 'C':
+                cidx.append(i)
+            if el == 'H':
+                hidx.append(i)
+        if (choice == 'ketone') and (len(cidx) < 3):
+            # impossible
+            return []
+        if (choice == 'aldehyde') and (len(cidx) < 2):
+            # impossible
+            return []
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for co in COlist:
+            ico = co[0]  # the C atom
+            bondset = set(np.argwhere(connex[ico, :]).flatten()) # index of all bonded atoms
+            cset = bondset.intersection(cidx)
+            hset = bondset.intersection(hidx)
+            if (choice == 'ketone') and (len(cset) == 2):
+                grplist.append((cset.pop(), ico, cset.pop()))
+            if (choice == 'aldehyde') and (len(cset) == 1) and (len(hset) == 1):
+                grplist.append((cset.pop(), ico, hset.pop()))
+        return grplist
+    def find_carbox(self, choice, bondtol=1.3):
+        # Return list of tuples of atom numbers
+        #   (C, C, O, H) for carboxylic acid
+        #   (C, C, O) for carboxylate
+        #   (O, C, O, O) for generic carbonate
+        #   choices: ['acid', 'base', 'carbonate']
+        if choice not in ['acid', 'base', 'carbonate']:
+            print_err('', f'Unknown choice = {choice}')
+        grplist = []
+        COlist = self.find_carbonyl(bondtol=bondtol)
+        if len(COlist) < 1:
+            # impossible
+            return grplist
+        cidx = self.element_indices('C')
+        oidx = self.element_indices('O')
+        if (len(cidx) < 2) or (len(oidx) < 2):
+            # impossible
+            return []
+        ohidx = self.find_OH(bondtol=bondtol)
+        ohset = [oh[0] for oh in ohidx]  # indices of OH oxygen atoms
+        if (choice == 'acid') and (len(ohidx) < 1):
+            # impossible
+            return []
+        try:
+            connex = self.connection
+        except AttributeError:
+            connex = self.connection_table(bondtol)
+        for co in COlist:
+            ico = co[0]  # the carbonyl C atom
+            ioc = co[1]  # the carbonyl O atom
+            bondset = set(np.argwhere(connex[ico, :]).flatten()) # index of all bonded atoms
+            cset = bondset.intersection(cidx)
+            oset = bondset.intersection(oidx)
+            oset.remove(ioc)  # exclude the carbonyl oxygen
+            oterm = np.any([(sum(connex[io,:]) == 1) for io in oset])  # are there terminal O atoms?
+            if (len(cset) == 1) and (len(oset) == 1):
+                # carboxylic acid or carboxylate
+                acidset = oset.intersection(ohset)  # connected OH
+                if (choice == 'acid') and (len(acidset) == 1):
+                    grplist.append((cset.pop(), ico, ioc, acidset.pop()))
+                if (choice == 'base') and (len(acidset) == 0) and oterm:
+                    grplist.append((cset.pop(), ico, ioc, (oset.pop())))
+            if (choice == 'carbonate') and (len(oset) == 2) and (len(cset) == 0):
+                grplist.append((oset.pop(), ico, ioc, oset.pop()))
+        return grplist
+    def functional_groups(self, bondtol=1.3):
+        # Return a dict of functional group name (keys)
+        #    and list of tuples of atom numbers (values)
+        namelist = ['methyl', 'nitro', 
+                    'nitrosyl', 'nitrite',
+                    'benzene_ring', 'carbonyl',
+                    'COC', 'OH',
+                    ]
+        funclist = [self.find_methyls, self.find_nitro,
+                    self.find_nitrosyl, self.find_nitrite,
+                    self.find_benzene_rings, self.find_carbonyl,
+                    self.find_COC, self.find_OH,
+                    ]
+        retdict = {}
+        for name, func in zip(namelist, funclist):
+            retdict[name] = func(bondtol=bondtol)
+        for name in ['ether', 'ester', 'anhydride']:
+            retdict[name] = self.find_ethestanh(choice=name)
+        for name in ['ketone', 'aldehyde']:
+            retdict[name] = self.find_aldket(choice=name)
+        for name in ['acid', 'base', 'carbonate']:
+            retdict[name] = self.find_carbox(choice=name)
+        return retdict
     def find_terminal_rotors(self, tol=1.3):
         '''
         return a list of rotor descriptions (including methyls)
@@ -3158,10 +3503,12 @@ def minimize_RMSD_rotation(G, Gref):
         dcom = distance(self.COM(), point)
         dist = [a.distance_to(point) for a in self.atom]
         return dist, dcom
-    def connection_table(self, tol=1.3, bondlength=False):
+    def connection_table(self, tol=1.3, bondlength=False, asDF=False):
         # return a connection table:  a 2D array indicating bonded distances (= 0 or 1)
         # 'tol' is bond-stretch tolerance
         # if 'bondlength', instead of just '1', return the bond length (angstrom)
+        #   Assign the matrix an an attribute
+        # if 'asDF', return as a pandas DataFrame
         dmat = self.distmat(unit='angstrom') / tol
         connex = np.zeros_like(dmat, dtype=int)
         for i in range(self.natom()):
@@ -3174,7 +3521,15 @@ def minimize_RMSD_rotation(G, Gref):
             # convert '1's to actual distance
             dmat *= tol
             connex = connex * dmat
-        return connex
+        self.connection = connex
+        if not asDF:
+            return connex
+        else:
+            # convert to DataFrame
+            elems = [a.el for a in self.atom]
+            df = pd.DataFrame(columns=elems, data=connex)
+            df.insert(0, 'el', elems)
+            return df
     def nbonds(self, tol=1.3):
         # number of bonds, as identified by distance
         n2 = self.connection_table(tol).sum()
@@ -3247,13 +3602,17 @@ def minimize_RMSD_rotation(G, Gref):
                 slist.append(stoichiometry(adict))
             ilist.append(jlist)
         return slist, ilist
-    def extended_connection_table(self, tol=1.3, connex=None):
+    def extended_connection_table(self, tol=1.3, connex=None, asDF=False):
         # return a 2D array where A_ij is the number of bonded
         #   links to get from atom i to atom j
         # Zeros on the diagonal and for unconnected atom pairs
-        # 'connex' is a plain connection table
+        # 'connex' is a plain connection table (optional input)
+        # 'asDF' to request result as a pandas DataFrame instead of numpy array
         if connex is None:
-            xconn = self.connection_table(tol)
+            try:
+                xconn = self.connection.copy()
+            except AttributeError:
+                xconn = self.connection_table().copy()
         else:
             xconn = connex.copy()
         natom = xconn.shape[0] 
@@ -3272,7 +3631,14 @@ def minimize_RMSD_rotation(G, Gref):
                                 xconn[i][k] = xconn[k][i] = nbond + 1
                                 changed = True
             nbond += 1
-        return xconn
+        if not asDF:
+            return xconn
+        else:
+            # convert to DataFrame
+            elems = [a.el for a in self.atom]
+            df = pd.DataFrame(columns=elems, data=xconn)
+            df.insert(0, 'el', elems)
+            return df
     def Coulomb_mat(self, select=0, bondtol=1.3):
         # return a Coulomb matrix (atomic units)
         # if 'select' != 0, then the matrix is zero
@@ -3431,6 +3797,7 @@ def minimize_RMSD_rotation(G, Gref):
         return nfrag
     def find_fragments(self, tol=1.3):
         # return a list of [list of atom numbers] that are connected
+        # e.g. within a non-bonded complex
         natom = self.natom()
         bonded = self.bonded_list(tol=tol)
         # bonded[i] is the list of atoms that are connected to atom i (indices, not labels)
@@ -3452,12 +3819,14 @@ def minimize_RMSD_rotation(G, Gref):
                         remaining.remove(j)
                         moved = True
         return bunch
-    def assignTerminality(self, tol=1.3):
+    def assignTerminality(self, tol=1.3, asDF=False):
         # assign a 'terminality' number to each atom;
         #  it's the number of iterations that the atom survives,
         #  where one iteration removes all terminal atoms
         # Return a list of terminality numbers
         # Atoms that can't be removed get terminality = -1
+        #   assign the array as an attribute
+        # if 'asDF', return as a pandas DataFrame
         natom = self.natom()
         terminality = np.zeros(natom, dtype=int)
         remaining = np.arange(natom)  # the indices of the atoms not yet removed
@@ -3478,7 +3847,14 @@ def minimize_RMSD_rotation(G, Gref):
                 break
             else:
                 natom = len(remaining)
-        return terminality
+        self.terminality = terminality
+        if not asDF:
+            return terminality
+        else:
+            # convert to DF
+            elems = [a.el for a in self.atom]
+            df = pd.DataFrame({'el': elems, 'terminality': terminality})
+            return df
     def rings(self, minimal=False, tol=1.3):
         # return a list of lists
         #   each sub-list is the indices of atoms in one ring
