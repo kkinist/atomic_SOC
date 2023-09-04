@@ -2562,6 +2562,241 @@ def minimize_RMSD_rotation(G, Gref):
             ang = self.dihedral(i, j, k, l, 'linear', unit)
             aldihe.append( ((i,j,k,l), ang) )
         return aldihe
+    def find_functional_group(self, fgroup='all', bondtol=1.3):
+        # Return a dict of functional groups
+        #    key   = name of group
+        #    value = list of tuples (atom indices)
+        # 'all' means all implemented functional groups
+        gknown = ['methyl', 'nitro', 'nitrate', 'nitrite', 'nitrosyl', 
+                 'carbonyl', 'ketone', 'aldehyde', 'ether', 'ester',
+                 'anhydride', 'carbonate', 'carboxylic acid',
+                 'carboxylate', 'hydroxyl', 'alcohol', 'hydroxylamine',
+                 'benzene ring', 'NH2', 'nitrile',
+                 'primary amine', 'secondary amine', 'tertiary amine',
+                 'primary amide', 'secondary amide', 'tertiary amide',
+                 'amine', 'amide', 'peroxide', 'sulfoxide', 'sulfone']
+        try:
+            bondedatoms = self.bondedatoms
+        except AttributeError:
+            bondedatoms = self.bonded_atoms(bondtol=bondtol)
+        try:
+            terms = self.terminality
+        except AttributeError:
+            terms = self.assignTerminality(bondtol)
+        bentype = self.Benson_atom_type(detail=1)
+        retdict = {}
+        if fgroup == 'all':
+            # recurse through all known
+            for grp in gknown:
+                #print('>>>', grp)
+                d = self.find_functional_group(grp, bondtol=bondtol)
+                if d[grp]:
+                    retdict.update(d)
+            return retdict
+        # find one specified type of functional group
+        grplist = []  # the value to be assigned to retdict[fgroup]
+        if fgroup == 'methyl':
+            # C bonded to at least 3 H: (C, H, H, H)
+            for iat in self.element_indices('C'):
+                hlist = bondedatoms[iat].get('H', [])
+                if len(hlist) >= 3:
+                    grplist.append( (iat, *hlist[:3]) )
+        elif fgroup in ['nitro', 'nitrate', 'nitrite', 'nitrosyl']:
+            # proxiterminal N bonded to terminal O
+            #    exactly two terminal O's for nitro: (N, O, O)
+            #                       and for nitrate: (O, N, O, O)
+            #    exactly one terminal O for nitrite: (O, N, O_term)
+            #                      and for nitrosyl: (N, O)
+            noterm = {'nitro': 2, 'nitrate': 2, 'nitrite': 1, 'nitrosyl': 1} # required number of "Od" O-atoms
+            noint  = {'nitro': 0, 'nitrate': 1, 'nitrite': 1, 'nitrosyl': 0} # require number of internal O-atoms
+            for iat in range(self.natom()):
+                if bentype[iat] != 'Nd':
+                    continue
+                # are the numbers of bonded "O" and "Od" atoms correct?
+                blist = self.bondlist[iat]
+                jterm = [j for j in blist if (bentype[j] == 'Od')]
+                jint  = [j for j in blist if (bentype[j] == 'O')]
+                nterm = len(jterm)
+                nint  = len(jint)
+                if (nterm == noterm[fgroup]) and (nint == noint[fgroup]):
+                    # order the atoms as promised
+                    alist = jint + [iat] + jterm
+                    grplist.append(tuple(alist))
+        elif fgroup in ['carbonyl', 'ketone', 'aldehyde', 'carbonate', 'carboxylic acid', 'carboxylate']:
+            # carbonyl atom order is (C, O)
+            # ketone (C, C, O, C)
+            # aldehyde (C, C, O, H)
+            # carbonate (O, C=, O=, O)
+            # carboxylic acid (C, O, O, H)
+            # carboxylate (C, O, O)
+            for iat in range(self.natom()):
+                if bentype[iat] != 'Cd':
+                    continue
+                alist = []
+                jterm = [j for j in self.bondlist[iat] if (bentype[j] == 'Od')]
+                if jterm:
+                    # found a carbonyl group
+                    if fgroup == 'carbonyl':
+                        alist = [iat, jterm[0]]  # [Cd, Od]
+                    if fgroup in ['ketone', 'aldehyde']:
+                        clist = bondedatoms[iat].get('C', [])
+                        hlist = bondedatoms[iat].get('H', [])
+                        if (fgroup == 'ketone') and (len(clist) == 2):
+                            alist = [clist[0], iat, jterm[0], clist[1]]
+                        if (fgroup == 'aldehyde') and (len(clist) == 1) and (len(hlist) == 1):
+                            alist = [clist[0], iat, jterm[0], hlist[0]]
+                    if fgroup in ['carbonate', 'carboxylic acid', 'carboxylate']:
+                        olist = bondedatoms[iat].get('O', []).copy()
+                        try:
+                            olist.remove(jterm[0])  # this leaves the non-terminal O atoms
+                        except ValueError:
+                            pass
+                    if (fgroup == 'carbonate') and (len(olist) == 2):
+                        alist = [olist[0], iat, jterm[0], olist[1]]
+                    if (fgroup in ['carboxylic acid', 'carboxylate']) and (len(olist) == 1):
+                        if terms[olist[0]] == 0:
+                            # other O is terminal
+                            if fgroup == 'carboxylate':
+                                alist = [iat, jterm[0], olist[0]]
+                        else:
+                            holist = bondedatoms[olist[0]].get('H', [])
+                            if holist:
+                            # other O is bonded to H
+                                if fgroup == 'carboxylic acid':
+                                    alist = [iat, jterm[0], olist[0], holist[0]]
+
+                if alist:
+                    grplist.append(tuple(alist))
+        elif fgroup in ['ether', 'ester', 'anhydride']:
+            # ether (C, O, C)
+            # ester (C, O, C, O)
+            # anhydride (O, C, O, C, O)
+            for iat in self.element_indices('O'):
+                clist = bondedatoms[iat].get('C', [])
+                if len(clist) != 2:
+                    continue
+                # find carbonyls
+                alist = []
+                colist = self.find_functional_group('carbonyl', bondtol=bondtol).get('carbonyl')
+                nco = len(colist)
+                if (fgroup == 'ether') and (nco == 0):
+                    alist = [clist[0], iat, clist[1]]
+                if (fgroup == 'ester') and (nco == 1):
+                    coatoms = colist[0]  # a duple (C, O)
+                    alist = [(set(clist) - set(coatoms)).pop(), iat, *coatoms]
+                if (fgroup == 'anhydride') and (nco == 2):
+                    alist = [colist[0][1], colist[0][0], iat, colist[1][0], colist[1][2]]
+                if alist:
+                    grplist.append(tuple(alist))
+        elif fgroup in ['hydroxyl', 'alcohol', 'hydroxylamine']:
+            # hydroxyl (O, H)
+            # alcohol (C, O, H)
+            # hydroxylamine (N, O, H)
+            for iat in self.element_indices('O'):
+                hlist = bondedatoms[iat].get('H', [])
+                if hlist:
+                    if fgroup == 'hydroxyl':
+                        grplist.append( (iat, hlist[0]) )
+                    if fgroup == 'alcohol':
+                        clist = bondedatoms[iat].get('C', [])
+                        if clist:
+                            # an alcohol unless the carbon is in a carbonyl group
+                            notCO = True
+                            oclist =  bondedatoms[clist[0]].get('O', [])
+                            for iO in oclist:
+                                if bentype[iO] == 'Od':
+                                    notCO = False
+                            if notCO:
+                                grplist.append( (clist[0], iat, hlist[0]) )
+                    if fgroup == 'hydroxylamine':
+                        nlist = bondedatoms[iat].get('N', [])
+                        if nlist:
+                            grplist.append( (nlist[0], iat, hlist[0]) )
+        elif fgroup == 'benzene ring':
+            setCb = set([j for j, el in enumerate(bentype) if el == 'Cb'])
+            for ring in self.rings():
+                if (len(ring) == 6) and set(ring).issubset(setCb):
+                    grplist.append(tuple(ring))
+        elif fgroup == 'NH2':
+            # ordering (N, H, H)
+            for iat in self.element_indices('N'):
+                hlist = bondedatoms[iat].get('H', [])
+                if len(hlist) == 2:
+                    grplist.append( (iat, *hlist) )
+        elif fgroup == 'nitrile':
+            # ordering (C, N)
+            for iat in range(self.natom()):
+                if bentype[iat] != 'Nt':
+                    continue
+                clist = bondedatoms[iat].get('C', [])
+                iCt = [j for j in clist if bentype[j] == 'Ct']
+                if iCt:
+                    grplist.append( (iCt[0], iat))
+        elif fgroup in ['primary amine', 'secondary amine', 'tertiary amine',
+                       'primary amide', 'secondary amide', 'tertiary amide']:
+            # primary (N, C, H, H)
+            # secondary (N, C, C, H)
+            # tertiary (N, C, C, C)
+            req_carb = {'primar': 1, 'second': 2, 'tertia': 3}
+            rC = req_carb[fgroup[:6]]  # required number of carbons
+            rH = 3 - rC                # required number of hydrogens
+            for iat in self.element_indices('N'):
+                hlist = bondedatoms[iat].get('H', [])
+                clist = bondedatoms[iat].get('C', [])
+                if (len(clist) == rC) and (len(hlist) == rH):
+                    # count the carbons that are carbonyls
+                    nCO = 0
+                    for iC in clist:
+                        olist = bondedatoms[iC].get('O', [])
+                        for iO in olist:
+                            if bentype[iO] == 'Od':
+                                nCO += 1
+                    if nCO:
+                        if 'amide' in fgroup:
+                            grplist.append( tuple([iat, *clist, *hlist]) )
+                    else:
+                        if 'amine' in fgroup:
+                            grplist.append( tuple([iat, *clist, *hlist]) )
+        elif fgroup == 'amine':
+            # aggregate primary, secondary and tertiary
+            for grp in ['primary amine', 'secondary amine', 'tertiary amine']:
+                rvals = self.find_functional_group(grp)[grp]
+                if len(rvals):
+                    grplist += rvals
+        elif fgroup == 'amide':
+            # aggregate primary, secondary and tertiary
+            for grp in ['primary amide', 'secondary amide', 'tertiary amide']:
+                rvals = self.find_functional_group(grp)[grp]
+                if len(rvals):
+                    grplist += rvals
+        elif fgroup == 'peroxide':
+            # anything with an O-O bond (O, O)
+            for iat in self.element_indices('O'):
+                olist = bondedatoms[iat].get('O', [])
+                if olist:
+                    grplist.append( tuple([iat, olist[0]]) )
+        elif fgroup in ['sulfoxide', 'sulfone']:
+            # sulfoxide (S, C, C, O)
+            # sulfone (S, C, C, O, O)
+            nO = {'sulfoxide': 1, 'sulfone': 2}
+            for iat in self.element_indices('S'):
+                clist = bondedatoms[iat].get('C', [])
+                if len(clist) == 2:
+                    # possible
+                    olist = bondedatoms[iat].get('O', [])
+                    nod = 0
+                    idxod = []
+                    for iO in olist:
+                        if bentype[iO] == 'Od':
+                            nod += 1
+                            idxod.append(iO)
+                    if nod == nO[fgroup]:
+                        grplist.append( tuple([iat, *clist, *idxod]) )
+        else:
+            print_err('', f'Unknown functional group {fgroup}')
+        retdict[fgroup] = grplist
+        return retdict    
+    '''
     def find_methyls(self, bondtol=1.3):
         # return list of tuples of atom numbers (C, H, H, H)
         mlist = []
@@ -2581,9 +2816,6 @@ def minimize_RMSD_rotation(G, Gref):
                         # a methyl group; add to list
                         mlist.append( (i, *hlist) )
         return mlist
-    def find_methyl(self, bondtol=1.3):
-        # just an alias
-        return self.find_methyls(bondtol)
     def find_nitro(self, bondtol=1.3):
         # Find (terminal) NO2 groups
         # return list of tuples of atom numbers (N, O, O)
@@ -2915,6 +3147,7 @@ def minimize_RMSD_rotation(G, Gref):
         for name in ['acid', 'base', 'carbonate']:
             retdict[name] = self.find_carbox(choice=name)
         return retdict
+    '''
     def find_terminal_rotors(self, tol=1.3):
         '''
         return a list of rotor descriptions (including methyls)
@@ -2957,6 +3190,26 @@ def minimize_RMSD_rotation(G, Gref):
         # save to attribute variable
         self.bondlist = bonded
         return bonded
+    def bonded_atoms(self, bondtol=1.3):
+        # Return list of dict
+        #   elems[i] looks like {'H': [4,5,6]}
+        #   if atom #i is bonded to three H atoms with
+        #      indices 4,5,6
+        # Return the dict and also store it in attribute 'bondedatoms'
+        bondlist = self.bondlist
+        if bondlist is None:
+            bondlist = self.bonded_list(tol=bondtol)
+        bondedatoms = []
+        for iat in range(self.natom()):
+            bats = {}
+            for jat in bondlist[iat]:
+                el = self.atom[jat].el
+                jlist = bats.get(el, [])
+                jlist.append(jat)
+                bats[el] = jlist
+            bondedatoms.append(bats)
+        self.bondedatoms = bondedatoms
+        return bondedatoms
     def list_bonds(self, tol=1.3, maxtry=None, warn=True):
         '''
         Return a non-redundant list of all bonds
