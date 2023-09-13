@@ -3,9 +3,9 @@
 # Karl Irikura 
 
 # suppress annoying warning
-from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
-import warnings
-warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
+#from numba.core.errors import NumbaDeprecationWarning
+#import warnings
+#warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
 
 import re, sys, os, subprocess
 #import string, copy
@@ -69,11 +69,29 @@ MULTSPIN = {v: k for k, v in SPINMULT.items()}
 SPINLABEL = {2*k+1: v for k, v in SPINMULT.items()}
 LABELSPIN = {v: k for k, v in SPINLABEL.items()}
 
-
 EPS0 = 8.8541878128e-12  # vacuum permittivity in F/m
 PI = np.pi
-#
 GOLD = (1 + np.sqrt(5))/2  # golden ratio
+
+ELZ = ['n',
+    'H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne',
+    'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar',
+    'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni',
+    'Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr',
+    'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd',
+    'Ag', 'Cd', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe',
+    'Cs', 'Ba',
+        'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb',
+             'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu',
+           'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt',
+             'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn',
+    'Fr', 'Ra',
+        'Ac', 'Th', 'Pa', 'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk',
+             'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr',
+           'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt',
+           'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og']
+
+
 def isotopic_mass(atlabel):
     # Given a label like '1-H' or 'pt195', return the atomic mass
     # Data from from https://physics.nist.gov/cgi-bin/Compositions/stand_alone.pl
@@ -1342,23 +1360,7 @@ def elz(ar, choice=''):
     # return elemental symbol given an atomic number 
     # If 'choice' is specified as 'symbol' or 'Z', return that.
     # if 'ar' is a list, then return a corresponding list
-    symb = ['n',
-        'H', 'He', 'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne',
-        'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar',
-        'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni',
-        'Cu', 'Zn', 'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr',
-        'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd',
-        'Ag', 'Cd', 'In', 'Sn', 'Sb', 'Te', 'I', 'Xe',
-        'Cs', 'Ba',
-            'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb',
-                 'Dy', 'Ho', 'Er', 'Tm', 'Yb', 'Lu',
-               'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt',
-                 'Au', 'Hg', 'Tl', 'Pb', 'Bi', 'Po', 'At', 'Rn',
-        'Fr', 'Ra',
-            'Ac', 'Th', 'Pa', 'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk',
-                 'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr',
-               'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt',
-               'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc', 'Lv', 'Ts', 'Og']
+    symb = ELZ
     if type(ar) == str and not re.match(r'^\d+$', ar):
         # this looks like an element symbol
         ar = ar.title()  # Title Case
@@ -2562,11 +2564,12 @@ def minimize_RMSD_rotation(G, Gref):
             ang = self.dihedral(i, j, k, l, 'linear', unit)
             aldihe.append( ((i,j,k,l), ang) )
         return aldihe
-    def find_functional_group(self, fgroup='all', bondtol=1.3):
+    def find_functional_group(self, fgroup='all', bondtol=1.3, warn=False, spin=False):
         # Return a dict of functional groups
         #    key   = name of group
         #    value = list of tuples (atom indices)
         # 'all' means all implemented functional groups
+        # If 'spin' == True, consider non-zero spin as a functional group
         gknown = ['methyl', 'nitro', 'nitrate', 'nitrite', 'nitrosyl', 
                  'carbonyl', 'ketone', 'aldehyde', 'ether', 'ester',
                  'anhydride', 'carbonate', 'carboxylic acid',
@@ -2574,7 +2577,8 @@ def minimize_RMSD_rotation(G, Gref):
                  'benzene ring', 'NH2', 'nitrile',
                  'primary amine', 'secondary amine', 'tertiary amine',
                  'primary amide', 'secondary amide', 'tertiary amide',
-                 'amine', 'amide', 'peroxide', 'sulfoxide', 'sulfone']
+                 'amine', 'amide', 'peroxide', 'sulfoxide', 'sulfone',
+                 'C-C', 'C=C', 'C#C', 'fluoro', 'chloro']
         try:
             bondedatoms = self.bondedatoms
         except AttributeError:
@@ -2583,8 +2587,11 @@ def minimize_RMSD_rotation(G, Gref):
             terms = self.terminality
         except AttributeError:
             terms = self.assignTerminality(bondtol)
-        bentype = self.Benson_atom_type(detail=1)
+        bentype = self.Benson_atom_type(detail=1, warn=warn)
         retdict = {}
+        if spin and (self.spinmult > 1):
+            # length of list = value of (2*S)
+            retdict = {'2S': [0] * (self.spinmult - 1)}
         if fgroup == 'all':
             # recurse through all known
             for grp in gknown:
@@ -2792,6 +2799,32 @@ def minimize_RMSD_rotation(G, Gref):
                             idxod.append(iO)
                     if nod == nO[fgroup]:
                         grplist.append( tuple([iat, *clist, *idxod]) )
+        elif fgroup in ['C-C', 'C=C', 'C#C']:
+            # C-C single bonds (C, C)
+            # C=C double bonds (C, C)
+            # C#C triple bonds (C, C)
+            # Aromatic bonds are excluded
+            bmult = {'C-C': 1, 'C=C': 2, 'C#C': 3}[fgroup]
+            dfbond = self.list_bonds(tol=bondtol, warn=warn)
+            subdf = dfbond[dfbond.order == bmult]  # correct bond order
+            subdf = subdf[(subdf.el1 == 'C') & (subdf.el2 == 'C')]
+            for irow, row in subdf.iterrows():
+                i1 = row.i1
+                i2 = row.i2
+                # exclude aromatic bonds
+                if (bentype[i1] == 'Cb') and (bentype[i2] == 'Cb'):
+                    continue
+                grplist.append( (i1, i2) )
+        elif fgroup in ['fluoro', 'chloro']:
+            # fluoro (X, F)
+            # chloro (X, Cl)
+            hal = {'fluoro': 'F', 'chloro': 'Cl'}[fgroup]
+            for iat in self.element_indices(hal):
+                # must be bonded to exactly one atom
+                brow = self.connection[iat, :]
+                nbond = brow.sum()
+                if nbond == 1:
+                    grplist.append( (np.argwhere(brow)[0][0], iat) )
         else:
             print_err('', f'Unknown functional group {fgroup}')
         retdict[fgroup] = grplist
@@ -3260,6 +3293,7 @@ def minimize_RMSD_rotation(G, Gref):
             ibondl = list(ihh) # make disposable copy of list of heavy-heavy bonds
             bord = np.array(atord)  # make disposable copy
             # consider connected pairs in random order, to avoid getting stuck with open valences
+            #    this gives variable results for benzyne and phenyl!
             random.shuffle(ibondl)
             for ib in ibondl:
                 i1 = dfbond.loc[ib, 'i1']
@@ -3297,6 +3331,62 @@ def minimize_RMSD_rotation(G, Gref):
             if warn:
                 s = f'Did not satisfy all valencies in {maxtry} attempts'
                 print_err('', s, halt=False)
+        # o-benzyne and phenyl special cases
+        for ring in rings:
+            benzyne = phenyl = True  # whether possible
+            if len(ring) != 6:
+                continue
+            # all atoms within one 6-membered ring
+            dfring = dfbond[(dfbond.i1.isin(ring) & dfbond.i2.isin(ring))].copy()
+            dfdoub = dfring[dfring.order == 2]  # double bonds
+            # need exactly four double bonds for cumulenic o-benzyne
+            if len(dfdoub) != 4:
+                benzyne = False
+            # need exactly 3 double bonds for cumulenic phenyl
+            if len(dfdoub) != 3:
+                phenyl = False
+            # how many atoms participate in two double bonds? 
+            iddbl = []
+            dblist = list(dfdoub.i1) + list(dfdoub.i2)
+            for i in set(dblist):
+                if dblist.count(i) == 2:
+                    iddbl.append(i)
+            numdd = len(iddbl)
+            if (numdd == 2) and benzyne:
+                # yes; do they share a double bond?
+                [i1, i2] = sorted(iddbl)  # expect i1 < i2
+                dfshare = dfdoub[(dfdoub.i1 == i1) & (dfdoub.i2 == i2)]
+                if len(dfshare) == 1:
+                    # yes:  o-benzyne; change whole ring to triple + 2 doubles + 3 singles
+                    #print('o-benzyne detected')
+                    for irow, row in dfring.iterrows():
+                        if (row.i1 == i1) and (row.i2 == i2):
+                            dfbond.at[irow, 'order'] = 3
+                        elif (row.i1 in iddbl) or (row.i2 in iddbl):
+                            dfbond.at[irow, 'order'] = 1
+                        elif row.order == 2:
+                            dfbond.at[irow, 'order'] = 1
+                        elif row.order == 1:
+                            dfbond.at[irow, 'order'] = 2
+            elif (numdd == 1) and phenyl:
+                # change one cumulenic double to single
+                icumul = blist[iddbl[0]]  # the atoms double-bonded to the funny one
+                # change one single to double
+                singl = set(ring) - set(dblist)
+                # there should be exactly one atom with no double bonds
+                isingl = singl.pop()
+                for irow, row in dfring.iterrows():
+                    if isingl in [row.i1, row.i2]:
+                        for idc in icumul:
+                            if idc in [row.i1, row.i2]:
+                                # change this to double bond
+                                i2 = idc
+                                dfbond.at[irow, 'order'] = 2
+                # change the old double to a single
+                for irow, row in dfdoub.iterrows():
+                    if iddbl[0] in [row.i1, row.i2]:
+                        if i2 in [row.i1, row.i2]:
+                            dfbond.at[irow, 'order'] = 1                            
         return dfbond
     def xxxlist_bonds(self, tol=1.3, maxtry=None, warn=True, Cpriority=False):
         '''
@@ -7510,6 +7600,166 @@ def formula_to_atomlist(formula_in):
             newlist.append(a)
     return newlist
 ##
+def xxx_atlist_prim(alf):
+    # Give a pure alpha formula, like 'clo' or 'co' or 'Co',
+    #   return a list of elements like ['Cl', 'O'] or ['C', 'O']
+    #   or ['Co'].  I.e., only change capitalization if needed.
+    atlist = []
+    maxit = 10 + len(alf)
+    iter = 0
+    def update_atlist(s):
+        nonlocal alf
+        atlist.append(s)
+        alf = alf[(len(s)):]
+        return
+    while alf:
+        iter += 1
+        if iter > maxit:
+            print_err('', 'Maximum interations')
+        # Are first two characters correctly capitalized?
+        if len(alf) > 1:
+            s = alf[:2]
+            if s in ELZ:
+                # yes, exact capitalization
+                update_atlist(s)
+                continue
+        # Is first one character capitalized?
+        s = alf[0]
+        # special case (avoid 'n' for neutron)
+        if s == 'n':
+            s = 'N'
+        if s in ELZ:
+            # yes
+            update_atlist(s)
+            continue
+        # Capitalization must be corrected
+        s1 = alf[0].upper()
+        if s1 in ELZ:
+            # first char is good, but also check that the next works
+            if len(alf) > 1:
+                s2 = alf[1].upper()
+                if len(alf) > 2:
+                    s23 = alf[1:3].capitalize()
+                    if (s2 in ELZ) or (s23 in ELZ):
+                        # looks OK
+                        update_atlist(s1)
+                        continue
+                else:
+                    if s2 in ELZ:
+                        # looks OK
+                        update_atlist(s1)
+                        continue
+            else:
+                # there is only one character
+                update_atlist(s1)
+                continue
+        # first char was no good; try first two
+        if len(alf) > 1:
+            s = alf[:2].capitalize()
+            if s in ELZ:
+                # yes
+                update_atlist(s)
+                continue
+        # nothing worked; insert '?' and increment one character
+        update_atlist('?')
+    return atlist
+##
+def substring_lists_max2(s):
+    # Return a list of lists of 's' in all possible
+    #   lists of substrings of length 1 or 2
+    slist = []
+    n = len(s)
+    if n < 2:
+        return [[s]]
+    elif n == 2:
+        return [[s[0], s[1]], [s]]
+    elif n > 2:
+        l1 = substring_lists_max2(s[0])
+        lrest1 = substring_lists_max2(s[1:])
+        for lis in l1:
+            for lres in lrest1:
+                newl = lis + lres
+                if newl not in slist:
+                    slist.append(lis + lres)
+        l2 = substring_lists_max2(s[:2])
+        lrest2 = substring_lists_max2(s[2:])
+        for lis in l2:
+            for lres in lrest2:
+                newl = lis + lres
+                if newl not in slist:
+                    slist.append(lis + lres)
+    return slist
+##
+def atlist_prim(alf):
+    # Given a pure alpha formula like 'sif'
+    # Return a list of lists of elements 
+    #   like [ ['Si', 'F'], ['S', 'I', 'F'] ]
+    # Only change capitalization if needed, so
+    #   'SiF' and 'SIF' are unambiguous
+    # 'prev' is a list of previous matches for a search tree
+    #   (used in recursion)
+    # Lists will include "False" upon failure
+    matchlist = []
+    # get all possible 1- and 2-character parsings
+    lposs = substring_lists_max2(alf)
+    # first check without changing case
+    for clis in lposs:
+        match = []
+        for el in clis:
+            if el in ELZ:
+                match.append(el)
+            else:
+                # failure
+                match = False
+                break
+        if match:
+            matchlist.append(match)
+    if len(matchlist) == 1:
+        # user used good capitalization
+        return matchlist
+    for clis in lposs:
+        match = []
+        for el in clis:
+            el = el.capitalize()
+            if el in ELZ:
+                match.append(el)
+            else:
+                # failure
+                match = False
+                break
+        if match:
+            matchlist.append(match)
+    return matchlist
+##
+def atlist_from_formula(formula):
+    # Given a formula like 'ch3cl', return a list
+    #   of lists of elements like ['C', 'H', 'H', 'H', 'Cl']
+    #   or 'sif' giving [['S', 'I', 'F'], ['Si', 'F']]
+    # Non-alphanumeric characters are ignored
+    rx_s = re.compile('[a-zA-Z]+|\d+')
+    rx_num = re.compile('\d+')
+    
+    m = rx_s.findall(formula)
+    atlists = [[]]
+    for w in m:
+        if rx_num.match(w):
+            # multiplier for last element read
+            for atlist in atlists:
+                atlist += [atlist[-1]] * (int(w) - 1) # the list already has one copy
+        else:
+            # alpha characters
+            clists = atlist_prim(w)
+            newlist = []
+            for atlist in atlists:
+                for clist in clists:
+                    newlist.append(atlist + clist)
+            atlists = newlist
+    if len(atlists) == 0:
+        print_err('', f'String \'{formula}\' does not look like a chemical formula', halt=False)
+        return None
+    else:
+        return atlists
+##
 def formula(atlist, Hill=False):
     # given a list of element symbols, return a formula
     # optionally using Hill convention
@@ -8109,7 +8359,11 @@ def print_dict(d, nindent=0, sort=False):
         v = d[k]
         kstr = f'{k} :'
         endstr = '\n'
-        if pd.isnull(v) or np.isscalar(v) or (len(v) > 1):
+        try:
+            benull = pd.isnull(v).all()
+        except AttributeError:
+            benull = pd.isnull(v)
+        if benull or np.isscalar(v) or (len(v) > 1):
             # print value on same line as key
             endstr = ' '
         print(spre + kstr, end=endstr)
