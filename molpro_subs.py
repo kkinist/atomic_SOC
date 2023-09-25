@@ -4973,6 +4973,45 @@ def nbfn(fpro, prim=False):
     else:
         return nc
 ##
+def final_occup_vector(fname):
+    # Return a DataFrame with columns=irreps and 
+    #   rows=spin
+    # For the last set of converged ROHF orbitals 
+    rex = re.compile('\s*Final( alpha | beta  | )occupancy:')
+    # get the irrep labels corresponding to their ordering
+    re_irrl = re.compile('\s*NUMBER OF CONTRACTIONS:')
+    re_ir = re.compile(r'\d+(\D+)')
+    occd = {}  # key = spin, value = list of occup numbers by irrep
+    with open(fname, 'r') as F:
+        for line in F:
+            m = rex.match(line)
+            if m:
+                spin = m.group(1)
+                occd[spin] = line.split(':')[1].split()
+            if re_irrl.match(line):
+                irreps = []
+                for w in line.split():
+                    m = re_ir.match(w)
+                    if m:
+                        irreps.append(m.group(1))
+    # rename the dict keys (spin names)
+    for sp in occd.copy().keys():
+        if sp == ' ':
+            s = 'both'
+        else:
+            s = sp.strip()
+        occd[s] = occd.pop(sp)
+    spins = [s for s in occd.keys()]
+    nirr = len(irreps)
+    nspin = len(spins)
+    dfocc = pd.DataFrame(columns=irreps, index=spins, data=np.zeros((nspin, nirr)))
+    for sp, vec in occd.items():
+        s = sp.strip()
+        for ir, n in zip(irreps, vec):
+            dfocc.loc[s, ir] = n
+    dfocc.rename(columns={' ': 'both'}, inplace=True)
+    return dfocc
+##
 def resources_used(fpro):
     # return a dict of total time, disk used (from end of MOLPRO output file)
     rx_cpu = re.compile(r'^\s*CPU TIMES\s+\*\s+(\d+\.\d+)')
