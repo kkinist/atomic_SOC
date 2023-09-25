@@ -4979,8 +4979,7 @@ def final_occup_vector(fname):
     # For the last set of converged ROHF orbitals 
     rex = re.compile('\s*Final( alpha | beta  | )occupancy:')
     # get the irrep labels corresponding to their ordering
-    re_irrl = re.compile('\s*NUMBER OF CONTRACTIONS:')
-    re_ir = re.compile(r'\d+(\D+)')
+    re_ir = re.compile(r'\d+(\S+)')
     occd = {}  # key = spin, value = list of occup numbers by irrep
     with open(fname, 'r') as F:
         for line in F:
@@ -4988,9 +4987,9 @@ def final_occup_vector(fname):
             if m:
                 spin = m.group(1)
                 occd[spin] = line.split(':')[1].split()
-            if re_irrl.match(line):
+            if ' NUMBER OF CONTRACTIONS:' in line:
                 irreps = []
-                for w in line.split():
+                for w in line.split('(')[-1].split():
                     m = re_ir.match(w)
                     if m:
                         irreps.append(m.group(1))
