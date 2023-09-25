@@ -3,9 +3,9 @@
 # Karl Irikura 
 
 # suppress annoying warning
-#from numba.core.errors import NumbaDeprecationWarning
-#import warnings
-#warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
+from numba.core.errors import NumbaDeprecationWarning
+import warnings
+warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
 
 import re, sys, os, subprocess
 #import string, copy
@@ -6990,11 +6990,11 @@ def consolidate_stick_spectrum(xstick, ystick, thresh):
     return x, y
 ##
 def convolve_peakshape(xstick, ystick, fwhm, shape='gaussian', npt=1000, 
-                       xmin=None, xmax=None, fcombine=20):
+                       xmin=None, xmax=None, fcombine=20, rescale=False):
     # convolve a stick spectrum with a Gaussian or Lorentzian lineshape
     # return x and y for the convolved spectrum over the range [xmin, xmax]
     # default for xmin and xmax are the limits of xstick +- 10*width
-    # y is scaled so its max equals that of ystick
+    # If 'rescale', then y is scaled so its max equals that of ystick
     # larger values of 'fcombine' will allow closer-spaced sticks,
     #    i.e., will use more resources
     if fwhm <= 0:
@@ -7003,14 +7003,16 @@ def convolve_peakshape(xstick, ystick, fwhm, shape='gaussian', npt=1000,
         print_err('', f'xstick has length {len(xstick)} but ystick has {len(ystick)}')
     if shape.lower() == 'lorentzian':
         g = lorentzian_func
+        # convert fwhm to gamma
+        param = fwhm / 2
     elif shape.lower() == 'gaussian':
         g = gaussian_func
         # convert fwhm to sigma
-        fwhm /= np.sqrt(8 * np.log(2))
+        param = fwhm / np.sqrt(8 * np.log(2))
     else:
         print_err('', f'Unknown convolving function {shape}')
     # done with error checking
-    # to avoid memory overflow, combine sticks that are very close
+    # to avoid memory overflow, combine sticks that are "very" close
     vclose = fwhm / fcombine
     x, y = consolidate_stick_spectrum(xstick, ystick, vclose)
     if xmin is None:
@@ -7019,10 +7021,11 @@ def convolve_peakshape(xstick, ystick, fwhm, shape='gaussian', npt=1000,
         xmax = x.max() + 10 * fwhm
     xc = np.linspace(xmin, xmax, npt)
     xij = np.subtract.outer(xc, x)
-    gij = g(xij, 0, fwhm)
+    gij = g(xij, 0, param)
     yc = np.dot(gij, y)
-    # scaling
-    yc *= y.max() / yc.max()
+    if rescale:
+        # re-scaling
+        yc *= y.max() / yc.max()
     return xc, yc
 ##
 def stoichiometry(elemdict, ones=True):
@@ -7994,7 +7997,7 @@ def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
     return
 ##
 def plot_broadened_sticks(Xin, Yin, xlabel, ylabel, xmin=None, xmax=None, fwhm=0,
-                     stick_color='b', conv_color='red',
+                     fcombine=100, stick_color='b', conv_color='red',
                      conv_alpha=0.2, figsize=None,
                      xlbl = 0.05, ylbl = 0.8, title=''):
     '''
@@ -8031,7 +8034,7 @@ def plot_broadened_sticks(Xin, Yin, xlabel, ylabel, xmin=None, xmax=None, fwhm=0
     ax.stem(X[idx], Y[idx], linefmt=stick_color+'-', markerfmt=' ', basefmt=' ')
     if fwhm:
         # convolve with a gaussian
-        xc, yc = convolve_peakshape(X, Y, fwhm)
+        xc, yc = convolve_peakshape(X, Y, fwhm, fcombine=fcombine)
         idx = np.argwhere( (xc >= xmin) & (xc <= xmax) )
         x = xc[idx].flatten()
         y = yc[idx].flatten()
