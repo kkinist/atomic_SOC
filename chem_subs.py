@@ -3796,6 +3796,27 @@ def minimize_RMSD_rotation(G, Gref):
                     for j in frag:
                         dmat[i, j] = 0.
         return dmat
+    def nuclear_repulsion_mat(self):
+        # Return the symmetric matrix of internuclear repulsion energies
+        #   note that the sum will be twice the repulsion energy for the molecule
+        dmat = self.distmat()
+        if self.units == 'angstrom':
+            # convert to bohr
+            dmat /= BOHR
+        emat = np.zeros_like(dmat)
+        for i in range(self.natom()):
+            Zi = self.atom[i].Z()
+            for j in range(i):
+                Zj = self.atom[j].Z()
+                rij = dmat[i, j]
+                Eij = Zi * Zj / rij
+                emat[i, j] = emat[j, i] = Eij
+        return emat
+    def nuclear_repulsion(self):
+        # Return the nuclear repulsion energy
+        emat = self.nuclear_repulsion_mat()
+        E = emat.sum() / 2
+        return E
     def vdW_distmat(self, minbonds):
         # return symmetric matrix of interatomic van der Waals distances
         # zero between atoms that are separated by fewer than
