@@ -3524,6 +3524,17 @@ def readSOcompos(fname):
                 lineno.append(lno)
     return retval, lineno
 ##
+def read_RHF_energies(fname):
+    # Return a list of RHF/ROHF energies
+    rx = re.compile(r' !RHF STATE\s+(\d+\.\d)\s+Energy')
+    elist = []
+    with open(fname, 'r', errors='replace') as F:
+        for line in F:
+            if rx.match(line):
+                w = line.split()
+                elist.append(float(w[-1]))
+    return elist
+##
 def readSOmatrixBlocks(fname):
     # return a list of line buffers (each a list of lines) 
     # also a list of line numbers for the start of each block
@@ -4973,10 +4984,11 @@ def nbfn(fpro, prim=False):
     else:
         return nc
 ##
-def final_occup_vector(fname):
+def final_occup_vector(fname, omit_empty=False):
     # Return a DataFrame with columns=irreps and 
     #   rows=spin
     # For the last set of converged ROHF orbitals 
+    # 'omit_empty' will delete any irreps without occupieds
     rex = re.compile('\s*Final( alpha | beta  | )occupancy:')
     # get the irrep labels corresponding to their ordering
     re_ir = re.compile(r'\d+(\S+)')
@@ -5003,12 +5015,14 @@ def final_occup_vector(fname):
     spins = [s for s in occd.keys()]
     nirr = len(irreps)
     nspin = len(spins)
-    dfocc = pd.DataFrame(columns=irreps, index=spins, data=np.zeros((nspin, nirr)))
+    dfocc = pd.DataFrame(columns=irreps, index=spins, data=np.zeros((nspin, nirr), dtype=int))
     for sp, vec in occd.items():
         s = sp.strip()
         for ir, n in zip(irreps, vec):
-            dfocc.loc[s, ir] = n
+            dfocc.loc[s, ir] = int(n)
     dfocc.rename(columns={' ': 'both'}, inplace=True)
+    if omit_empty:
+        dfocc = dfocc.loc[:, (dfocc != 0).any(axis=0)]
     return dfocc
 ##
 def resources_used(fpro):
