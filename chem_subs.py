@@ -1355,22 +1355,23 @@ class ZMatrix(object):
         # return a string in Xmol's XYZ format
         return self.toGeometry().XmolXYZ(comment)
 ##
-def elz(ar, choice=''):
+def elz(ar, choice='', failflag=False):
     # return atomic number given an elemental symbol, or
     # return elemental symbol given an atomic number 
     # If 'choice' is specified as 'symbol' or 'Z', return that.
     # if 'ar' is a list, then return a corresponding list
-    symb = ELZ
-    if type(ar) == str and not re.match(r'^\d+$', ar):
+    if type(ar) == str and re.match(r'^[a-zA-Z]+$', ar):
         # this looks like an element symbol
-        ar = ar.title()  # Title Case
+        ar = ar.capitalize()  # Capitalize
+        if ar not in ELZ:
+            if failflag:
+                return False
+            else:
+                print_err('', '{:s} is not an element symbol'.format(ar))
         if choice == 'symbol':
             return ar
         else:
-            if ar not in symb:
-                print_err('', '{:s} is not an element symbol'.format(ar))
-            else:
-                return symb.index(ar)
+            return ELZ.index(ar)
     if type(ar) == list:
         # process a list of atoms
         vals = []
@@ -1381,15 +1382,15 @@ def elz(ar, choice=''):
     try:
         Z = int(ar)
     except:
-        print('Error taking int of ar = in elz()', ar, type(ar))
+        print(f'Error taking int({ar}) = in elz()', type(ar))
         return None
     if choice == 'Z':
         return Z
     else:
         try:
-            return symb[Z]
+            return ELZ[Z]
         except ValueError:
-            print_err('', 'No element symbol for Z = {:d}'.format(Z))
+            print_err('', f'No element symbol for Z = {Z}')
 ##
 def vpqn(z):
     # return valence principal quantum number (for neutral atom)
