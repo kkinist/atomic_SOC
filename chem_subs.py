@@ -6122,7 +6122,7 @@ def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
         for i in range(nv):
             eigvecs[i][Nrot] = cvecs[:, i]
     if not silent:
-        lev0 = EvJ.min()
+        lev0 = np.nanmin(EvJ)  # unlike min(), nanmin() ignores NaNs
         zpecm = (lev0 - Epot) * AU2CM
         print(f'\tLowest level at E = {lev0:.6f} so ZPE = {zpecm:.2f} cm-1')
     # convert energy levels to cm**-1
