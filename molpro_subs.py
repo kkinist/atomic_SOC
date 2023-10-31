@@ -687,7 +687,8 @@ class MRCI:
                 continue
             if hasR:
                 r.append(crow.R.values[0])
-            if abs(row.Eref - crow.Energy.values[0]) < etol:
+            edif = abs(row.Eref - crow.Energy.values[0])
+            if edif < etol:
                 lzz = crow[strlzlz].values[0]
                 lz.append(np.sqrt(abs(lzz)))
                 if atom:
@@ -697,7 +698,7 @@ class MRCI:
                     Llist.append(L)
                 term.append(crow[cterm].values[0])
             else:
-                s = '*** Error: wrong reference energy: CAS = {:.5f} buf Eref = {:.5f}'
+                s = '*** Error: wrong reference energy: CAS = {:.6f} buf Eref = {:.6f}'
                 print(s.format(crow.Energy.values[0], row.Eref))
                 print(row.to_frame().T)
                 print(crow)
@@ -1478,6 +1479,9 @@ class fullmatSOCI:
         self.diagonalize(store=True, vectors=True, sortval=sortval)
         if props:
             self.props = readSOprops(fpro)
+            if not len(self.props):
+                # try the even-electron version
+                self.props = readSOprops_even(fpro)
     def diagonalize(self, store=False, vectors=False, sortval=True):
         # compute squared eigenvectors and eigenvalues
         # if 'store' == False, return (vals, vecsq, ciwt) and do not modify attributes
@@ -2112,11 +2116,11 @@ class fullmatSOCI:
             else:
                 k = '(1)' + lbl
                 if k not in termlist:
-                    s = 'CC reference term labels {:s} and {:s} not found'
-                    chem.print_err('', s.format(lbl, k))
+                    s = f'CC reference term labels {lbl} and {k} not found'
+                    chem.print_err('', s)
             ecc[k] = energy
-            dfnew.at[dfnew.Term == k, 'Enew'] = energy
-            dfnew.at[dfnew.Term == k, 'anchor'] = 'input'
+            dfnew.loc[dfnew.Term == k, 'Enew'] = energy
+            dfnew.loc[dfnew.Term == k, 'anchor'] = 'input'
             ccterms.append(k)
             # if needed, adjust name of reference term(s) to match dfnew.Term
             for key in refterm.keys():
@@ -3399,6 +3403,7 @@ def readSOenergy(fname, recalc=False, linenum=False):
 ##
 def readSOprops(fname, linenum=False):
     # Return a DataFrame (or list thereof) of dipole properties of SO states
+    #   for odd-electron system like neutral PtH
     retlist = []
     lineno = []
     dip = {'x': -1, 'y': -1, 'z': -1}  # diagonal dipole
@@ -3480,6 +3485,71 @@ def readSOprops(fname, linenum=False):
             return retlist[0]
         else:
             return retlist
+##
+def readSOprops_even(fname):
+    # Return a DataFrame of dipole properties of SO states
+    #   for even-electron system like PtH- anion
+    # Intended for a single geometry
+    retlist = []
+    lineno = []
+    re_start = re.compile(r'\s+Expectation values <i\|DM([XYZ])\|i>')
+    re_state = re.compile(r'\s+state:(\s+\d+)+')
+    re_value = re.compile(r'\s+value:(\s+[-]?\d+\.\d+)+')
+    re_dashblank = re.compile(r'^[\.\s]*$')
+    re_trans_hdr = re.compile(r'\s+Transition matrix elements <i\|DM([XYZ])\| 1>')
+    re_abst = re.compile(r'\s*Abs\. Value \(a\.u\.\):')
+    inblock = intrans = False
+    vals = {x: [] for x in 'XYZ'}
+    trans = {x: [] for x in 'XYZ'}
+    with open(fname, 'r', errors='replace') as F:
+        for lno, line in enumerate(F):
+            if inblock:
+                # read some diagonal dipole moment components
+                m1 = re_state.match(line)
+                m2 = re_value.match(line)
+                if m1:
+                    # state numbers (Nr)
+                    states.extend([int(w) for w in line.split()[1:]])
+                elif m2:
+                    # dipole magnitudes
+                    vals[dipdir].extend([float(w) for w in line.split()[1:]])
+                elif re_dashblank.match(line):
+                    continue
+                else:
+                    inblock = False
+                    #print(states)
+            if intrans:
+                # read some transition moment components
+                if re_abst.match(line):
+                    trans[trdir].extend([float(x) for x in line.split()[3:]])
+                    if len(trans[trdir]) == nstate:
+                        # data have been read for all states
+                        intrans = False
+            m = re_start.match(line)
+            if m:
+                inblock = True
+                intrans = False
+                states = []
+                dipdir = m.group(1)  # 'X' or 'Y' or 'Z'
+            m = re_trans_hdr.match(line)
+            if m:
+                intrans = True
+                trdir = m.group(1)  # 'X' or 'Y' or 'Z'
+                nstate = len(vals['X'])
+    # create a DataFrame
+    # dipole moments
+    df = pd.DataFrame({'Nr': states})
+    for x in 'XYZ':
+        if np.any(vals[x]):
+            col = '<i|{:s}|i>'.format(x.lower())
+            df[col] = vals[x]
+    # transition moments squared
+    momsq = 0
+    for trdir, tvals in trans.items():
+        momsq += np.array(tvals) ** 2
+    col = '<i|R|1>**2'
+    df[col] = momsq
+    return df
 ##
 '''
 def readSOcompos(fname):
@@ -5045,3 +5115,14 @@ def resources_used(fpro):
                 retval['disk_local'] = (float(words[3]), words[4])
                 retval['disk'] = (float(words[6]), words[7])
     return retval
+##
+def dipole_origin(fpro):
+    # return the [x,y,z] coordinates of the center of the dipole operator
+    regex = re.compile(r' OPERATOR DM\s+FOR CENTER\s+(\d+)\s+COORDINATES:(\s+[-]?\d+\.\d+)+')
+    with open(fpro) as F:
+        for line in F:
+            if regex.match(line):
+                x0 = [float(x) for x in line.split()[-3:]]
+                return x0
+    return []
+##
