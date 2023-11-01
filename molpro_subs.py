@@ -36,15 +36,15 @@ class MULTI:
     # 'PG' is name of computational point group (optional)
     # 'parity' is to use irrep to assign parity of Sigma states
     # 'atom' is a flag affecting L**2 treatment
-    def __init__(self, linebuf, PG=None, parity=True, atom=False):
+    def __init__(self, linebuf, PG=None, parity=True, atom=False, quiet=False):
         self.lines = linebuf
         self.PG = PG
         self.nfrozen = self.nfrozen()
         self.norb = self.nactorb()
         self.groups = self.parseGroups()
         self.results = self.parseResults(atom=atom)
-        self.termLabels(parity=parity)
-        self.NOs = self.natorb_info()
+        self.termLabels(parity=parity, quiet=quiet)
+        self.NOs = self.natorb_info(quiet=quiet)
         self.civec = self.parseMULTIcivec()
     def print(self):
         print('{:d} closed-shell orbitals'.format(self.nfrozen))
@@ -210,7 +210,7 @@ class MULTI:
             if not quiet:
                 chem.print_err('', 'Unable to assign term symbol', halt=False)
         return
-    def natorb_info(self):
+    def natorb_info(self, quiet=False):
         # return a DataFrame describing the natural orbitals
         rx_NO = re.compile('\s+NATURAL ORBITALS')
         rx_end = re.compile('Total charge:')
@@ -281,7 +281,7 @@ class MULTI:
             if vocc[j] > 0:
                 activ[i] = True
                 vocc[j] -= 1
-                if occ[i] == 2.00000:
+                if (occ[i] == 2.00000) and (not quiet):
                     chem.print_err('', f'NO #{orb[i]} is active and doubly occupied', halt=False)
         if np.array(vocc).any():
             vocc = self.nactorb(irreps=True)
@@ -1624,7 +1624,8 @@ class fullmatSOCI:
         df = df[df[term] >= thr]
         return df
     def assign_omega(self, csq_thresh=0.0001, silent=False, ordering='up', 
-                     failure='crash', debug=False, props=['<i|z|i>']):
+                     failure='crash', debug=False, 
+                     props=['<i|z|i>', '<i|R|1>**2']):
         # if failure=='OK', continue despite failure in Omega assignments
         # include listed properties as available in DataFrame self.props
         dfstates, ok = SO_assign_omega(self.mrci, self.basis, self.SOe, self.vecsq,
@@ -3065,7 +3066,7 @@ def read_harmonic_freqs(fname):
     vecs = np.array(vecs, dtype='float').T
     return modenums, irreps, intenss, vecs
 ##
-def readMULTI(fname, linenum=False, PG=None, parity=True, atom=False):
+def readMULTI(fname, linenum=False, PG=None, parity=True, atom=False, quiet=False):
     # return a list of MULTI objects from a MOLPRO output file
     # If linenum == True, also return a list of line numbers
     # 'PG' is the name of the point group (optional)
@@ -3083,7 +3084,7 @@ def readMULTI(fname, linenum=False, PG=None, parity=True, atom=False):
                 if rx_end.match(line):
                     inMULTI = False
                     # create the MULTI object
-                    retval.append(MULTI(casbuf, PG=PG, parity=parity, atom=atom))
+                    retval.append(MULTI(casbuf, PG=PG, parity=parity, atom=atom, quiet=quiet))
             if rx_multi.match(line):
                 inMULTI = True
                 casbuf = [line.rstrip()]
@@ -3427,9 +3428,12 @@ def readSOprops(fname, linenum=False):
                     inblock = False
                     # save results for this block
                     dfret = pd.DataFrame({'Nr': np.array(nr).astype(int)})
+                    momsq = 0
                     for el, val in dip.items():
                         if val is not None:
-                            dfret[f'<i|{el}|i>'] = np.array(val).astype(float)
+                            mu_i1 = np.array(val).astype(float)
+                            dfret[f'<i|{el}|i>'] = mu_i1
+                            momsq += np.abs(mu_i1) ** 2
                     for el in ['x', 'y', 'z']:
                         if not len(tdipR[el]):
                             # no non-zero values
@@ -3438,6 +3442,8 @@ def readSOprops(fname, linenum=False):
                         valI = np.array(tdipI[el]).astype(float)
                         cdip = valR + 1j * valI
                         dfret[f'<i|{el}|1>'] = cdip
+                    # compute sum of squares of transition moments
+                    dfret['<i|R|1>**2'] = momsq
                     retlist.append(dfret)
                     continue
                 m = re_eltype.search(line)

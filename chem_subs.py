@@ -1506,9 +1506,14 @@ def min_to_exceed(bigser, target):
 def match_lineno(targno, numlist):
     # return the index of the largest value in 'numlist' that does not exceed 'targno'
     # This is for matching up line numbers.
+    # Return None if nothing matches
     a = np.array(numlist)
     idx = np.argwhere(a <= targno)
-    i = idx.max()
+    try:
+        i = idx.max()
+    except ValueError:
+        # no valid values
+        return None
     return i
 ##
 def ensure_file_handle(fF):
