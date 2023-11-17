@@ -172,6 +172,12 @@ class MULTI:
                     print(line)
                     sys.exit(0)
                 lexpec[m.group(2)].append(float(m.group(4)))
+            if 'WVFN' in line:
+                # MCSCF converged?
+                if 'CONVERGENCE REACHED' in line:
+                    self.converged = True
+                elif 'MAXIMUM NUMBER OF ITERATIONS REACHED' in line:
+                    self.converged = False
         try:
             df = pd.DataFrame({'Group': gnum, 'Size': size, 'Spin': spin, 'Irrep': irrep,
                           'Label': lbl, 'Energy': energy, 'dipX': dipx, 'dipY': dipy,

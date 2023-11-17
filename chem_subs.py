@@ -6078,7 +6078,7 @@ def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
     (xlow, ylow) = lowest_points(R, V, fitorder+1)
     if callable(V):
         # find the (rotationless) minimum by continuous means
-        res = optimize.minimize_scalar(V, bracket=[xlow[0], xlow[-1]])
+        res = optimize.minimize_scalar(V, bounds=[xlow[0], xlow[-1]], method='bounded')
         Epot = res.fun
         Rpot = res.x
     else:
@@ -6098,7 +6098,8 @@ def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
             centrifug = lambda r : V(r) + (J*(J+1)-omega*omega)/(2*mass*r*r)
             if Nrot == 0:
                 # find the physical minimum (J = omega)
-                res = optimize.minimize_scalar(centrifug, bracket=[xlow[0], xlow[-1]])
+                res = optimize.minimize_scalar(centrifug, bounds=[xlow[0], xlow[-1]],
+                                               method='bounded')
                 Ephys = res.fun
                 Rphys = res.x
         else:
