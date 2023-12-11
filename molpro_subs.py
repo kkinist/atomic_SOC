@@ -5138,3 +5138,41 @@ def dipole_origin(fpro):
                 return x0
     return []
 ##
+def compare_out_in(outpro, inpro):
+    # Return True if output file 'outpro' was generated using
+    #   the same input as shown in 'inpro'
+    # comparison is word by word within each line
+    # Special: in comment, '***,' input may be '***, ' output
+    # Special: floating '-0.0' should match '0.0'
+    inbuf = []
+    with open(inpro, 'r') as F:
+        for line in F:
+            ln = line.strip()
+            if ln[:4] == '***,':
+                ln = ln[4:].strip()
+            wrds = ln.split()
+            inbuf.append(wrds)
+    with open(outpro, 'r') as F:
+        for i, line in enumerate(F):
+            if 'PROGRAM SYSTEM MOLPRO' in line:
+                break
+            ln = line.strip()
+            if ln[:4] == '***,':
+                ln = ln[4:].strip()
+            wrds = ln.split()
+            # delete a line if all words are equal
+            for inline in inbuf.copy():
+                match = (len(inline) == len(wrds))
+                if match:
+                    for iw, ow in zip(inline, wrds):
+                        if iw != ow:
+                            try:
+                                if float(iw) == float(ow):
+                                    continue
+                            except:
+                                pass
+                            match = False
+                if match:
+                    inbuf.remove(inline)
+    return len(inbuf) == 0
+##
