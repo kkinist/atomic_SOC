@@ -7801,7 +7801,7 @@ def formula(atlist, Hill=False):
         except KeyError:
             atcount[at] = 1
     elems = sorted(atcount.keys())
-    if (not Hill) or ('C' in elems):
+    if Hill or ('C' in elems):
         # rearrange to put C, H in front
         for el in ['H', 'C']:
             if el in elems:
