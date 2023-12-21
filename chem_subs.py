@@ -2403,8 +2403,10 @@ def minimize_RMSD_rotation(G, Gref):
         if asdict:
             return acount
         stoich = stoichiometry(acount, ones=ones)
+        # assume that the charge is an integer
+        qint = int(round(self.charge))
         if charge and self.charge:
-            stoich += '{:+}'.format(self.charge)
+            stoich += '{:+}'.format(qint)
         return stoich
     def distance(self, i, j, unit=''):
         # distance between atoms i and j
