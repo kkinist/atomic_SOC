@@ -1848,7 +1848,7 @@ class fullmatSOCI:
         X = np.hstack((X, xe))
         if not quiet:
             print(f'Assigning J using {nlevel} clusters/levels')
-        Kmean = KMeans(n_clusters=nlevel)
+        Kmean = KMeans(n_clusters=nlevel, n_init=10)
         Kmean.fit(X)
         Kmean.cluster_centers_
         xmeans = [x[-1] for x in Kmean.cluster_centers_]
@@ -3371,6 +3371,7 @@ def readSOenergy(fname, recalc=False, linenum=False):
     retlist = []
     lineno = []
     inso = False
+    E0 = None
     with open(fname, 'r', errors='replace') as F:
         for lno, line in enumerate(F):
             # output looks different depending upon J integer or half-integer
@@ -3393,7 +3394,7 @@ def readSOenergy(fname, recalc=False, linenum=False):
                 inso = True
                 sobuf = [line.rstrip()]
                 lineno.append(lno)
-                E0 = None
+                #E0 = None
     if recalc:
         for so in retlist:
             so.recalc_wavenumbers()
