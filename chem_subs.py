@@ -7947,15 +7947,39 @@ def molec_term_to_greek(term):
         if lbl.lower() in term.lower():
             # replace it
             grk = term.lower().replace(lbl.lower(), GLAMBDA[i])
+    if grk == term:
+        # nothing changed; check for abbrevations like '2P' (capitalized)
+        for i, lbl in enumerate('SPDFG'):
+            if lbl[0] in term:
+                # replace it
+                grk = term.replace(lbl[0], GLAMBDA[i])
     return grk
 ##
-def term_degeneracy(term):
+def term_degeneracy(term, isatom=True):
     # total (unsplit) term degeneracy, atom or linear molecule
-    grk = molec_term_to_greek(term) # will not affect atomic symbols
+    #   value of J or Omega may be specified like this: 2P_0.5 (nitric oxide)
+    if '_' in term:
+        # J or Omega is specified, so nothing else matters
+        jstr = term.split('_')[1]
+        # remove any trailing sign from a 0+ or 0- state
+        jstr = jstr.replace('+', '').replace('-', '')
+        J = float(jstr)
+        if isatom:
+            degen = 2 * J + 1
+        else:
+            # 'J' is really Omega
+            if J > 0:
+                degen = 2
+            else:
+                degen = 1
+        return degen
+    # need degeneracy for entire term
+    if not isatom:
+        grk = molec_term_to_greek(term)
     slp = SL_from_term(grk)  # S, L/lambda, and possible reflection parity
     S = slp[0]
     sdegen = 2*S + 1
-    if len(slp) == 3:
+    if (len(slp) == 3) or (not isatom):
         # linear molecule
         lz = Lz_from_greek(grk)
         ldegen = 2
