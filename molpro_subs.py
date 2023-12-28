@@ -5029,6 +5029,25 @@ def total_charge(fpro, verbose=False):
     Q = qtot - nelec            
     return Q
 ##
+def read_nuclear_repulsion(fpro):
+    # Return either a list or a scalar, depending
+    #   upon how many values are found
+    # Return None if nothing is found
+    nucrep = []
+    with open(fpro) as F:
+        for line in F:
+            if 'NUCLEAR REPULSION ENERGY' in line:
+                words = line.split()
+                nucrep.append(float(words[3]))
+    n = len(nucrep)
+    if n == 1:
+        return nucrep[0]
+    elif n > 1:
+        return nucrep
+    else:
+        # found nothing
+        return None
+##
 def Ztot(fpro):
     # Return the total nuclear charge as reported
     with open(fpro, 'r') as F:
