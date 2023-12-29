@@ -7904,6 +7904,7 @@ def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
 def SL_from_term(term):
     # given a term symbol like '(1)1D' or 'a 3D*', return the values of S and L
     # in diatomic (linear) case, return S and Lambda and parity
+    # Return None upon failure
     rx = re.compile('(\d+)([SPDFGHIKLMNOQRTUV])')
     rx_grk = re.compile('(\d+)([{:s}])'.format(''.join(GLAMBDA)))
     diatom = False
@@ -7915,7 +7916,8 @@ def SL_from_term(term):
         if m:
             diatom = True
         else:
-            print_err('', 'not recognized as a term symbol: {:s}'.format(term))
+            print_err('', 'not recognized as a term symbol: {:s}'.format(term), halt=False)
+            return None
     mult = int(m.group(1))
     symb = m.group(2)
     S = (mult - 1)/2
@@ -7958,6 +7960,7 @@ def molec_term_to_greek(term):
 def term_degeneracy(term, isatom=True):
     # total (unsplit) term degeneracy, atom or linear molecule
     #   value of J or Omega may be specified like this: 2P_0.5 (nitric oxide)
+    # Return None upon failure
     if '_' in term:
         # J or Omega is specified, so nothing else matters
         jstr = term.split('_')[1]
@@ -7977,6 +7980,15 @@ def term_degeneracy(term, isatom=True):
     if not isatom:
         grk = molec_term_to_greek(term)
     slp = SL_from_term(grk)  # S, L/lambda, and possible reflection parity
+    if slp is None:
+        # label did not parse as a term symbol; look for leading spin multip
+        #    assume it is only one digit
+        char1 = grk[0]
+        if char1 in '123456789':
+            # return this as the degeneracy
+            return int(char1)
+        # failure
+        return None
     S = slp[0]
     sdegen = 2*S + 1
     if (len(slp) == 3) or (not isatom):
