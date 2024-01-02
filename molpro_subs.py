@@ -28,6 +28,46 @@ PHI = '\N{GREEK CAPITAL LETTER PHI}'
 GAMMA = '\N{GREEK CAPITAL LETTER GAMMA}'
 ETA = 'H'  # easier for typists
 GLAMBDA = {0: SIGMA, 1: PI, 2: DELTA, 3: PHI, 4: GAMMA, 5: ETA}
+
+COMP_GROUPS = ['C1', 'C2', 'C2h', 'C2v', 'Ci', 'Cs', 'D2', 'D2h']
+IRREPS = {'D2h': ['', 'Ag', 'B3u', 'B2u', 'B1g', 'B1u', 'B2g', 'B3g', 'Au'],
+          'C2v': ['', 'A1', 'B1', 'B2', 'A2'],
+          'C2h': ['', 'Ag', 'Au', 'Bu', 'Bg'],
+          'D2' : ['', 'A', 'B3', 'B2', 'B1'],
+          'Cs' : ['', "A'", 'A"'],
+          'C2' : ['', 'A', 'B'],
+          'Ci' : ['', 'Ag', 'Au'],
+          'C1' : ['', 'A']}
+
+def irrep_lookup(PG, irrep):
+    # Given a computational group 'PG' and an irrep number 'irrep',
+    #   return the Schönflies string for the irrep
+    #   or the reverse
+    PG = PG.capitalize()
+    if PG not in COMP_GROUPS:
+        # error
+        chem.print_err('', f'Group {PG} is not valid in Molpro', halt=False)
+        return ''
+    reps = IRREPS[PG]
+    try:
+        i = int(irrep)
+        if i > len(reps):
+            # error
+            chem.print_err('', f'Group {PG} does not have an irrep number {i}', halt=False)
+            return ''
+        schon = reps[i]
+        return schon
+    except:
+        # Try a reverse lookup
+        s = irrep.capitalize()
+        try:
+            i = reps.index(s)
+            return i
+        except:
+            # error
+            chem.print_err('', f'Group {PG} does not have an irrep called {s}', halt=False)
+            return ''
+
 ##
 ##
 class MULTI:
