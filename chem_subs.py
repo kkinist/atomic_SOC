@@ -7966,16 +7966,20 @@ def term_degeneracy(term, isatom=True):
         jstr = term.split('_')[1]
         # remove any trailing sign from a 0+ or 0- state
         jstr = jstr.replace('+', '').replace('-', '')
-        J = float(jstr)
-        if isatom:
-            degen = 2 * J + 1
-        else:
-            # 'J' is really Omega
-            if J > 0:
-                degen = 2
+        try:
+            J = float(jstr)
+            if isatom:
+                degen = 2 * J + 1
             else:
-                degen = 1
-        return degen
+                # 'J' is really Omega
+                if J > 0:
+                    degen = 2
+                else:
+                    degen = 1
+            return degen
+        except ValueError:
+            # maybe a trailing _g or _u
+            pass
     # need degeneracy for entire term
     if not isatom:
         grk = molec_term_to_greek(term)
