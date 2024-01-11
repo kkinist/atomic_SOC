@@ -705,6 +705,8 @@ class MRCI:
         # 'etol' is the energy-matching requirement for the MCSCF energy and the MRCI "reference" energy
         # No return value: self.results is modified
         # If 'atom', also transfer 'L**2'
+        # [Jan. 2024] Because state ordering may change from CASSCF to MRCI,
+        #    matching Eref to Ecas (instead of matching state labels). 
         strlzlz = 'LzLz'
         strlz = 'Lz'            
         strll = 'L**2'
@@ -723,14 +725,20 @@ class MRCI:
         r = []
         hasR = 'R' in dfcas  # whether bond length is present
         for i, row in self.results.iterrows():
-            crow = subdf[(subdf.Label == row.Ref)]
+            # Find the CASSCF state with matching energy
+            crow = subdf[np.abs(subdf.Energy - row.Eref) <= etol]
             if len(crow) < 1:
-                print(f'No CASSCF state from which to transfer Lz for MRCI {row.Label} {row.Spin}')
+                print(f'[transfer_la()] No CASSCF state matches Eref for MRCI {row.Label} {row.Spin} (etol = {etol})')
                 lz.append(-1)
                 if atom:
                     Llist.append(-1)
                 term.append('?')
                 continue
+            cilbl = row.Label
+            caslbl = crow.iloc[0].Label
+            if cilbl != caslbl:
+                print(f'---CASSCF state {caslbl} matched to MRCI state {cilbl}')
+                self.results.at[i, 'Ref'] = caslbl
             if hasR:
                 r.append(crow.R.values[0])
             edif = abs(row.Eref - crow.Energy.values[0])
@@ -4324,17 +4332,23 @@ def omega_range(L, spin, rounding=True):
     S = spin
     lo = L - S
     hi = L + S
-    vals = np.append(np.arange(lo, hi), hi)
-    vals = np.abs(vals)
     if rounding:
         # round to nearest half-integer
+        lo = chem.round_half_int(lo)
+        hi = chem.round_half_int(hi)
+        vals = np.append(np.arange(lo, hi), hi)
         vals = chem.round_half_int(vals)
+    else:
+        # no rounding (dangerous)
+        vals = np.append(np.arange(lo, hi), hi)
+    vals = np.abs(vals)
     return vals
 ##
 def omega_Sz_Lz(Sz, Lz):
     # return a set of one or two possible omega values (unsigned)
     oms = [abs(Sz + Lz), abs(Sz - Lz)]
     return set(oms)
+##
 def omega_counts(cas, silent=False, rounding=True):
     # Return a dict of Omega values spanned by the CASSCF or MRCI states
     omlist = []
