@@ -728,7 +728,7 @@ class MRCI:
             # Find the CASSCF state with matching energy
             crow = subdf[np.abs(subdf.Energy - row.Eref) <= etol]
             if len(crow) < 1:
-                print(f'[transfer_la()] No CASSCF state matches Eref for MRCI {row.Label} {row.Spin} (etol = {etol})')
+                print(f'[transfer_lz()] No CASSCF state matches Eref for MRCI {row.Label} {row.Spin} (etol = {etol})')
                 lz.append(-1)
                 if atom:
                     Llist.append(-1)
