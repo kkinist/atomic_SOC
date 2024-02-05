@@ -7885,6 +7885,7 @@ def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
         and an energy column labeled "Level (cm-1)"
      Return a new DataFrame with added column 'newcol'
      Accept both standard term symbols and symbols like "2[5/2]"
+     For symbols like "a 4F", just convert "a " to "(1)", etc. 
     '''
     dfret = dfexpt.copy()
     Ecol = "Level (cm-1)"
@@ -7896,7 +7897,17 @@ def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
         if lbl not in uniqlbl:
             uniqlbl.append(lbl)
             oldterm.append(lbl[1])
-    newsymb = enumerative_prefix(oldterm, always=always)
+    letter_ord = False  # do term labels carry letter prefixes a, b, c?
+    newsymb = []
+    rx_lett = re.compile('([a-z]\s)')
+    for tsymb in oldterm:
+        m = rx_lett.search(tsymb)
+        if m:
+            letter_ord = True
+            lett = m.group(1)
+            newsymb.append(tsymb.replace(lett, f'({ord(lett[0]) - 96})'))
+    if not letter_ord:
+        newsymb = enumerative_prefix(oldterm, always=always)
     smap = {lbl: new for lbl, new in zip(uniqlbl, newsymb)}
     dfret['uTerm'] = [smap[lbl] for lbl in zip(dfexpt.Configuration, dfexpt.Term)]
     return dfret
