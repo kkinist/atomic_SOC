@@ -1932,7 +1932,7 @@ class fullmatSOCI:
             Eshift_mean.append(grp.Eshift.mean())
             lterm = set(grp.Lead)
             if len(lterm) > 1:
-                chem.print_err('', 'More than one leading term for level {ilev}!', halt=False)
+                chem.print_err('', f'More than one leading term for level {ilev}!', halt=False)
                 Lead.append(sorted(lterm))
             else:
                 Lead.append(lterm.pop())
