@@ -1,0 +1,39 @@
+***,Co atom, larger active space, smaller core
+! 4F + 4F + 4P + 4P + [missing 2F] + 2G + 2P + 2D
+memory,2000,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Co}
+
+basis=cc-pwCVTZ-DK
+
+set,dkho=101
+
+! Co anion orbitals to favor s2 (?)
+{rhf,so-sci;wf,nelec=28,sym=1, spin=2}
+
+! state-averaged casscf
+{multi
+    closed,2,3
+    ! doublets
+    wf,nelec=27,sym=1,spin=1; state,17; 
+    ! quartets
+    wf,nelec=27,sym=1,spin=3; state,20; 
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and <L**2> values
+
+{ci;option,nstati=20;wf,sym=1,spin=1;state,17;save,5102.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=3; state,20;save,5101.2}
+hlsdiag(18) = energd4
+
+table, hlsdiag
+
+!compute and diagonalize SO matrix
+lsint
+{ci;hlsmat,ls,5102.2,5101.2;print,vls=0,hls=0}
+

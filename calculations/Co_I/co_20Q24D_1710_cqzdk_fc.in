@@ -1,0 +1,37 @@
+***,Co atom
+! 4F + 4F + 4P + 4P  + 2F + 2G + 2D + 2P
+memory,2000,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Co}
+
+basis=cc-pwCVQZ-DK
+
+set,dkho=101
+
+{rhf,so-sci;wf,nelec=27,sym=1, spin=3}
+
+! weights to avoid skipping terms
+{multi
+    closed,2,3
+    wf,nelec=27,sym=1,spin=3; state,20;
+      weight,1,1,1,1,1,1,1, 5,5,5, 5,5,5,5,5,5,5, 1,1,1
+    wf,nelec=27,sym=1,spin=1; state,24;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and LL values
+
+{ci;wf,sym=1,spin=3; state,20;save,5101.2}
+hlsdiag = energd4
+{ci;option,nstati=27;wf,sym=1,spin=1;state,24;save,5102.2}
+hlsdiag(21) = energd4
+
+table, hlsdiag
+
+!compute and diagonalize SO matrix
+lsint
+{ci;hlsmat,ls,5101.2,5102.2;print,vls=0,hls=0}
+

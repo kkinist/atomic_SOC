@@ -1,0 +1,31 @@
+***,Co atom
+! Ground 4F term only
+memory,2000,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Co}
+
+basis=cc-pwCVTZ-DK
+
+set,dkho=101
+
+{rhf,so-sci;wf,nelec=27,sym=1, spin=3}
+
+! 4F term only
+{multi
+    closed,2,3
+    wf,nelec=27,sym=1,spin=3; state,7;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, 4F energies and LL values
+
+{ci;wf,sym=1,spin=3; state,7; save,5103.2}
+hlsdiag = energd4
+
+table, hlsdiag
+
+lsint
+{ci;hlsmat,ls,5103.2;print,vls=0,hls=0}

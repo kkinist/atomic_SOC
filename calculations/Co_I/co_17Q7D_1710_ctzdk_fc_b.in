@@ -1,0 +1,46 @@
+***,Co atom
+! 4F + 4F + 4P  + 2F
+memory,2000,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Co}
+
+basis=cc-pwCVTZ-DK
+
+set,dkho=101
+
+{rhf,so-sci;wf,nelec=27,sym=1, spin=3}
+
+! seek second 4F to favor d8s1 config
+{multi
+    closed,2,3
+    wf,nelec=27,sym=1,spin=3; state,17;
+      weight,1,1,1,1,1,1,1, 5,5,5, 5,5,5,5,5,5,5,5
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Preparatory quartets
+
+! add 2F
+{multi
+    closed,2,3
+    wf,nelec=27,sym=1,spin=3; state,17;
+      weight,1,1,1,1,1,1,1, 5,5,5, 5,5,5,5,5,5,5,5
+    wf,nelec=27,sym=1,spin=1; state,7;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and LL values
+
+{ci;wf,sym=1,spin=3; state,17;save,5101.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=1;state,7;save,5102.2}
+hlsdiag(18) = energd4
+
+table, hlsdiag
+
+!compute and diagonalize SO matrix
+{ci;hlsmat,ls,5101.2,5102.2;print,vls=0,hls=0}
+
