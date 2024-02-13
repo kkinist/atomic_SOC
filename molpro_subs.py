@@ -1889,11 +1889,13 @@ class fullmatSOCI:
         # Create the array to send to the SciKit clustering routine
         # Clusters are based upon energy (mapped onto the interval [0, 1]) and
         #   upon term weights
-        X = np.transpose(self.termwt).copy() # term weights within each microstate
+        Xwt = np.transpose(self.termwt).copy() # term weights within each microstate
         # add another column for relative energy re-scaled to [0, 1] to match the term weights
-        xe = dfsoci.Erel.values / dfsoci.Erel.max()
+        levE = dfsoci.Erel.values
+        xe = levE / levE.max()
+        #xe = dfsoci.Erel.values / dfsoci.Erel.max()
         xe = xe.reshape((-1,1))
-        X = np.hstack((X, xe))
+        X = np.hstack((Xwt, xe))
         if not quiet:
             print(f'Assigning J using {nlevel} clusters/levels')
         Kmean = KMeans(n_clusters=nlevel, n_init=10)
@@ -1909,14 +1911,118 @@ class fullmatSOCI:
             J = np.round((g-1)/2, 1)
             dfsoci.loc[dfsoci.ilev == ilev, 'J'] = J
             Jfound.append(J)
-        # Error checking of assignments
+        # Error-checking of assignments
+        errcond = False
         if Counter(Jfound) != Counter(Jlist):
             print('J values found are not J values expected!')
             print('Expected:', sorted(Counter(Jlist).items()))
             print('Found   :', sorted(Counter(Jfound).items()))
+            errcond = True
         for irow, row in dfsoci.iterrows():
             if row.J not in row.Jposs:
                 print(f'Nr {row.Nr} has J = {row.J} but that is not among possibilities {sorted(row.Jposs)}')
+                errcond = True
+        if errcond:
+            print('*** Invalid assignments from Kmeans using energies and term weights')
+            dferr = pd.DataFrame({'E': levE})
+            for i in range(self.nterm):
+                dferr[f'Twt_{i}'] = Xwt[:,i]
+            #chem.displayDF(dferr)
+            # Try again using energies alone
+            print('\nAssign J values using energies alone')
+            Kmean.fit(xe)
+            Kmean.cluster_centers_
+            xmeans = [x[-1] for x in Kmean.cluster_centers_]
+            Emeans = np.array(xmeans) * dfsoci.Erel.max()
+            dfsoci['ilev'] = Kmean.labels_
+            dfsoci['Elev'] = [Emeans[i] for i in Kmean.labels_]
+            Jfound = []
+            for ilev, grp in dfsoci.groupby('ilev'):
+                g = len(grp)
+                J = np.round((g-1)/2, 1)
+                dfsoci.loc[dfsoci.ilev == ilev, 'J'] = J
+                Jfound.append(J)
+            # Error-checking of assignments
+            errcond = False
+            if Counter(Jfound) != Counter(Jlist):
+                print('J values found are not J values expected!')
+                print('Expected:', sorted(Counter(Jlist).items()))
+                print('Found   :', sorted(Counter(Jfound).items()))
+                errcond = True
+            for irow, row in dfsoci.iterrows():
+                if row.J not in row.Jposs:
+                    print(f'Nr {row.Nr} has J = {row.J} but that is not among possibilities {sorted(row.Jposs)}')
+                    errcond = True
+            if errcond:
+                print('*** Invalid results from Kmeans')
+                # Try again using a home-brew algorithm
+                print('\nAssign J values using energy and weight increments')
+                dE = levE[1:] - levE[:-1]
+                dE = [0] + dE.tolist()
+                dfincr = pd.DataFrame({'E': levE, 'dE': dE})
+                for col in dferr.columns[1:]:
+                    w = dferr[col].values
+                    dw = w[1:] - w[:-1]
+                    dfincr['d' + col] = [0] + dw.tolist()
+                print(f'There must be {nlevel} levels')
+                # Expect the largest energy and weight increments to be between 
+                #   levels, not within levels
+                # 'dfincr' holds increments
+                # 'dfbreaks' holds indices of increments by decreasing magnitude
+                #chem.displayDF(dfincr)
+                dfbreaks = pd.DataFrame()
+                for col in dfincr.columns[1:]:
+                    dfbreaks[col] = np.argsort(-np.abs(dfincr[col]))
+                #chem.displayDF(dfbreaks)
+                # Find the "best" breaks
+                breaks = []
+                irow = 0
+                while len(breaks) < nlevel:
+                    row = dfbreaks.loc[irow].values
+                    for idx in row:
+                        if idx not in breaks:
+                            breaks.append(idx)
+                        if len(breaks) == nlevel:
+                            break
+                    irow += 1
+                breaks = sorted(breaks)
+                ilev = []  # index for level
+                elev = []  # mean energy for level
+                j = 0
+                for i, idx in enumerate(breaks):
+                    emean = levE[j:idx].mean()
+                    for k in range(j, idx):
+                        ilev.append(i)
+                        elev.append(emean)
+                    j = idx
+                # add the last group
+                print('len, j =', len(dfsoci), j)
+                ilev.extend([i+1] * (len(dfsoci) - j))
+                emean = levE[j:].mean()
+                elev.extend([emean] * (len(dfsoci)- j))
+                dfsoci['ilev'] = ilev
+                dfsoci['Elev'] = elev
+                Jfound = []
+                for ilev, grp in dfsoci.groupby('ilev'):
+                    g = len(grp)
+                    J = np.round((g-1)/2, 1)
+                    dfsoci.loc[dfsoci.ilev == ilev, 'J'] = J
+                    Jfound.append(J)
+                # Error-checking of assignments
+                errcond = False
+                if Counter(Jfound) != Counter(Jlist):
+                    print('J values found are not J values expected!')
+                    print('Expected:', sorted(Counter(Jlist).items()))
+                    print('Found   :', sorted(Counter(Jfound).items()))
+                    errcond = True
+                for irow, row in dfsoci.iterrows():
+                    if row.J not in row.Jposs:
+                        print(f'Nr {row.Nr} has J = {row.J} but that is not among possibilities {sorted(row.Jposs)}')
+                        errcond = True
+                if errcond:
+                    print('****************************************')
+                    print('*** Failure to assign valid J values ***')
+                    print('****************************************')
         # Create new DataFrame for levels
         Nr = []  # list of lists
         E_mean = []
