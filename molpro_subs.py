@@ -127,9 +127,79 @@ class MULTI:
             m = rx.match(line)
             if m:
                 return int(m.group(1))
+    def dynw(self):
+        # return the dynamical weighting parameter, else False
+        rx = re.compile(r'DYNFAC=\s+(\d+\.\d+)')
+        dynfac = False
+        for line in self.lines:
+            m = rx.search(line)
+            if m:
+                dynfac = float(m.group(1))
+        return dynfac
+    def weights(self, rescale=False):
+        # return the final state weights
+        # a list of lists, one for each "State symmetry"
+        # if 'rescale', then scale so that smallest weight = 1
+        rx_init = re.compile(r' Weight factors for state symmetry\s+(\d+):')
+        rx_floats = re.compile(r'(\s+\d+\.\d+)+')
+        wts = []  # list of lists
+        inblock = False
+        # Get the initial weights
+        for line in self.lines:
+            if inblock:
+                if rx_floats.match(line):
+                    # continuation line
+                    ws.extend([float(x) for x in line.split()])
+                else:
+                    # end of weights for this "State symmetry" block
+                    wts.append(ws)
+                    inblock = False
+            if rx_init.match(line):
+                ws = [float(x) for x in line.split()[6:]]
+                inblock = True
+        # In case weighting is dynamical, find the last weights
+        rx_last = re.compile(r' New weights before normalization: ')
+        inblock = False
+        nwts = []
+        for line in self.lines:
+            if inblock:
+                if '=' not in line:
+                    inblock = False
+                else:
+                    for w in line.split():
+                        if '=' in w:
+                            nwts.append(float(w.split('=')[1]))
+            if rx_last.match(line):
+                nwts = []
+                for w in line.split():
+                    if '=' in w:
+                        nwts.append(float(w.split('=')[1]))
+                inblock = True
+        if nwts:
+            # divide into smaller lists to match initial weights
+            subwts = []
+            j = 0
+            for ws in wts:
+                nw = nwts[j : j+len(ws)]
+                subwts.append(nw)
+                j = len(ws)
+            # the dynamical weights are already scaled to a minimum of 1.0
+            return subwts
+        # re-scale the weights if requested
+        if rescale:
+            wmin = 1
+            for ws in wts:
+                for w in ws:
+                    wmin = min(wmin, w)
+            swts = []
+            for ws in wts:
+                swts.append([x / wmin for x in ws])
+            return swts
+        else:
+            return wts
     def parseGroups(self):
-        # A "group" here is labeled "State symmetry" in the output,
-        # because that name is too confusing without context.
+        # "State symmetry" in the output is here called a "group",
+        # because "State symmetry" is too confusing without context.
         # Return a list of dicts with basic parameters
         glist = []
         rx_g = re.compile(r' State symmetry\s*(\d+)\s*$')
