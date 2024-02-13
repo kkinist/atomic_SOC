@@ -7909,7 +7909,14 @@ def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
     if not letter_ord:
         newsymb = enumerative_prefix(oldterm, always=always)
     smap = {lbl: new for lbl, new in zip(uniqlbl, newsymb)}
-    dfret['uTerm'] = [smap[lbl] for lbl in zip(dfexpt.Configuration, dfexpt.Term)]
+    uterm = []
+    for lbl in zip(dfexpt.Configuration, dfexpt.Term):
+        try:
+            uterm.append(smap[lbl])
+        except KeyError:
+            # some problem with the labels; leave unchanged
+            uterm.append(lbl[1])
+    dfret['uTerm'] = uterm
     return dfret
 ##
 def SL_from_term(term):
