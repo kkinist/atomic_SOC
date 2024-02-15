@@ -38,6 +38,9 @@ IRREPS = {'D2h': ['', 'Ag', 'B3u', 'B2u', 'B1g', 'B1u', 'B2g', 'B3g', 'Au'],
           'C2' : ['', 'A', 'B'],
           'Ci' : ['', 'Ag', 'Au'],
           'C1' : ['', 'A']}
+# For an atom, note which irreps must have odd parity, by index
+ODD_IRREPS = {'Ci': [2], 'D2h': [2, 3, 5, 8]}
+ASD_superscript = '°'
 
 def irrep_lookup(PG, irrep):
     # Given a computational group 'PG' and an irrep number 'irrep',
@@ -1546,6 +1549,8 @@ class fullmatSOCI:
         # 'atom' is a flag that affects treatment of L**2
         PG = read_point_group(fpro)
         print('Computational group = {:s}'.format(PG))
+        self.PG = PG  # computational point group
+        self.isatom = atom
         # read CASSCF
         caslist, lineno_cas = readMULTI(fpro, PG=PG, linenum=True, atom=atom)
         CAS = caslist[-1]   # assume the last CASSCF to be the relevant one
@@ -1580,7 +1585,6 @@ class fullmatSOCI:
         sovecbuf, lineno_evec = readSOvectorBlocks(fpro)
         # 'sovecbuf' is a list of SOCI text buffers, or complex arrays
         sovecbuf = sovecbuf[-1]  # sovecbuf starts as list of lists
-        self.PG = PG  # computational point group
         self.dimen = dimen  # number of states
         self.is_hybrid = hybrid
         # does SObas require repair?
@@ -4394,10 +4398,18 @@ def termLabels(casDF, greek=True, hyphen=False, PG=None, parity=True):
     isatom = 'L**2' in dfnew.columns
     lbl = []
     if isatom:
-        for lsq in casDF['L**2']:
+        #for lsq in casDF['L**2']:
+        for irow, row in casDF.iterrows():
+            lsq = row['L**2']
             x = np.sqrt(4*lsq + 1) - 1
             Lval = int(np.round(x/2))
-            lbl.append(LSYMB[Lval])
+            s = LSYMB[Lval]
+            # check for odd/even
+            if PG in ODD_IRREPS.keys():
+                if row.Irrep in ODD_IRREPS[PG]:
+                    # this is odd; add the ASD superscript
+                    s += ASD_superscript
+            lbl.append(s)
     else:
         # linear molecule
         for irow, lzsq in enumerate(casDF['LzLz']):
