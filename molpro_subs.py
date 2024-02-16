@@ -1602,6 +1602,7 @@ class fullmatSOCI:
         self.cas = CAS  # a MULTI() object
         self.mrci = mrci  # list of MRCIstate() objects
         self.dfci = combineMRCI(cilist)
+        self.terms_enumerated = False  # flag to avoid stacking prefixes like (1)
         # get eigens that correspond to the matrix
         self.map_basis_to_CI()
         self.diagonalize(store=True, vectors=True, sortval=sortval)
@@ -1683,7 +1684,9 @@ class fullmatSOCI:
                 quiet=quiet).sort_values('Edav')[cols].reset_index(drop=True)
         dfterm['ecm'] = np.round(((dfterm.Edav - dfterm.Edav.min()) * chem.AU2CM).astype(float), 1)
         # add identifying prefixes to term labels as needed
-        dfterm['Term'] = chem.enumerative_prefix(dfterm.Term, always=always)
+        if not self.terms_enumerated:
+            dfterm['Term'] = chem.enumerative_prefix(dfterm.Term, always=always)
+            self.terms_enumerated = True
         self.dfterm = dfterm
         self.nterm = len(dfterm)
         # establish correspondence between terms and SO basis states
