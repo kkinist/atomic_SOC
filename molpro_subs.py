@@ -194,6 +194,9 @@ class MULTI:
             for ws in wts:
                 for w in ws:
                     wmin = min(wmin, w)
+            if wmin == 0:
+                print('*** Cannot rescale CASSCF weights to make 0 = 1 ***')
+                return wts
             swts = []
             for ws in wts:
                 swts.append([x / wmin for x in ws])
@@ -597,6 +600,7 @@ class MRCI:
         self.nstate = len(self.results)
         self.configs = self.config_coeffs()
         self.record = self.record_number()
+        self.spaces()
     def printlines(self):
         print('\n'.join(self.lines))
     def record_number(self):
@@ -608,6 +612,41 @@ class MRCI:
             if m:
                 recno = m.group(1)
         return recno
+    def spaces(self):
+        # get numbers of orbitals in irreps in spaces
+        orbs_core = []
+        orbs_closed = []
+        orbs_active = []
+        orbs_external = []
+        rx_ncore = re.compile(r' Number of core orbitals:\s+')
+        rx_clos = re.compile(r' Number of closed-shell orbitals:\s+')
+        rx_nact = re.compile(r' Number of active\s+orbitals:\s+')
+        rx_ext = re.compile(r' Number of external orbitals:\s+')
+        def int_in_parens(s):
+            # return list of integers between parenteses in string
+            intl = []
+            if ')'in s:
+                t = s.replace(')', '')
+                s = t.split('(')[1]
+                intl = [int(x) for x in s.split()]
+            else:
+                # no explicit list; return list of length 1
+                intl = [int(s.split()[-1])]
+            return intl
+        for line in self.lines:
+            if rx_ncore.match(line):
+                orbs_core = int_in_parens(line)
+            if rx_clos.match(line):
+                orbs_closed = int_in_parens(line)
+            if rx_nact.match(line):
+                orbs_active = int_in_parens(line)
+            if rx_ext.match(line):
+                orbs_external = int_in_parens(line)
+        self.orbs_core = orbs_core
+        self.orbs_closed = orbs_closed
+        self.orbs_active = orbs_active
+        self.orbs_external = orbs_external
+        return
     def basics(self):
         # get irrep, spin and electron counts
         rx_sym = re.compile(r' Reference symmetry:\s+(\d)\s+(\w+)')
@@ -1560,6 +1599,7 @@ class fullmatSOCI:
             print('   {:3d} {:s}'.format(len(grp), spin))
         # read MRCI
         cilist, lineno_ci = readMRCI(fpro, linenum=True)   # probably many
+        self.cilist = cilist
         # 'cilist' is a list of MRCI() objects
         for m in cilist:
             m.transfer_lz(CAS.results, atom=atom)
