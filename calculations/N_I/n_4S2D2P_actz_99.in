@@ -1,0 +1,36 @@
+***,N SO-CI
+! Active space (5,4)
+memory,1000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={N};
+
+basis=aug-cc-pwCVTZ-DK
+
+set,dkho=101
+
+{rhf;wf,nelec=7,sym=2,spin=3}
+
+! K shell closed but not frozen
+{multi
+    closed,1,0;
+    wf,sym=2,spin=3;state,1;
+        weight,all,99
+    wf,sym=2,spin=1;state,8;
+        weight,all,1
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+{ci;wf,sym=2,spin=3;state,1; save,5203.2}
+hlsdiag = energd
+{ci;wf,sym=2,spin=1;state,8; save,5201.2}
+hlsdiag(2) = energd4
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,ls,5203.2,5201.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
