@@ -14,6 +14,9 @@ LSQ = [0, 2, 6, 12, 20, 30, 42, 56, 72]
 LDEGEN = [1, 3, 5, 7, 9, 11, 13, 15, 17]
 LSYMB = 'SPDFGHIKL'  # they don't use J
 
+# Conversion from hartree to wavenumber
+AU2CM = 219464.6314
+
 # Energy tolerance for checking degeneracies
 CASTOL = 1.0e-5  # for CASSCF energies
 CITOL = 3.0e-5    # for HLSDIAG (MRCI+Q) energies
@@ -30,7 +33,7 @@ re_ll = re.compile(r'\s*ENERGY\s+LL\b')
 re_blank = re.compile('^\s*$')
 inLL = False
 # HLSDIAG values are in a table with column HLSDIAG
-re_hls = re.compile(r'\s*HLSDIAG\b')
+re_hls = re.compile(r'\s*HLSDIAG\s*$')
 inHLS = False
 with open(fpro, 'r') as F:
     for line in F:
@@ -63,7 +66,7 @@ with open(fpro, 'r') as F:
                 i = 0
                 while i < nstate:
                     ll = dfcas.at[i, 'LL']
-                    lval = LSQ.index(ll)
+                    lval = LSQ.index(np.rint(ll))
                     degen = LDEGEN[lval]
                     tsym = LSYMB[lval]
                     j = i + degen - 1
@@ -86,13 +89,15 @@ with open(fpro, 'r') as F:
                     tdegen.append(degen)
                     i += degen
                 dfterm = pd.DataFrame({'Term energy': eterm, 'Degen': tdegen, 'Symbol': lsym})
+                # add relative energies in cm-1
+                dfterm['Ecm'] = np.round(AU2CM * (eterm - min(eterm)), 1)
                 print(dfterm.to_string(index=False))
                 print()
                 continue
             # energy/LL data line
             words = line.split()
             ecas.append(float(words[0]))
-            llcas.append(float(words[1]))
+            llcas.append(float(words[1].replace('D', 'E')))
         if inHLS:
             if re_blank.match(line):
                 # End of a table of MRCI+Q (HLSDIAG) energies
@@ -153,6 +158,8 @@ with open(fpro, 'r') as F:
                 if not dfhlsdiag.E_correl.isna().any():
                     print('    all CI terms matched to CASSCF terms')
                 print('    "E_correl" is correlation energy')
+                # add relative energies in cm-1
+                dfhlsdiag['Ecm'] = np.round(AU2CM * (eterm - min(eterm)), 1)
                 print(dfhlsdiag.to_string(index=False))
                 print()
             else:
