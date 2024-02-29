@@ -3222,11 +3222,13 @@ def minimize_RMSD_rotation(G, Gref):
         if self.distance(i, j, unit='angstrom') < r0 * tol:
             return True
         return False
-    def bonded_list(self, tol=1.3):
+    def bonded_list(self, tol=1.3, connex=None):
         # return a list of arrays of bonded atoms (by index)
         # also store it as an attribute
+        # optionally provide a connection table
         natom = self.natom()
-        connex = self.connection_table(tol=tol)
+        if connex is None:
+            connex = self.connection_table(tol=tol)
         bonded = [ np.argwhere(connex[i,:]).flatten() for i in range(natom) ]
         # save to attribute variable
         self.bondlist = bonded
@@ -8666,4 +8668,35 @@ def print_err(errtype, name='', halt=True):
         # just print the message, then return
         print(msg)
     return
+##
+def read_MOL(filename):
+    # Read a simple MDL MOL file
+    # Return:  Geometry() object, number of atoms, list of header lines
+    header = [ '', '', '' ]
+    geom = Geometry()
+    with open(filename) as F:
+        for iline, line in enumerate(F):
+            if iline < 3:
+                header[iline] = line.rstrip()
+            elif iline == 3:
+                # '%3d' formatted fields may run together
+                natom = int(line[0:3])
+                nbond = int(line[3:6])
+                ctable = np.zeros( (natom, natom) )
+            elif iline < (4 + natom):
+                # an atom's coordinates and elemental symbol
+                sline = line.split()
+                xyz = np.array(sline[0:3])
+                el = sline[3]
+                atom = Atom(el, xyz)
+                geom.addatom(atom)
+            elif iline < (4 + natom + nbond):
+                # the connection table
+                i = int( line[0:3] ) - 1
+                j = int( line[3:6] ) - 1
+                b = int( line[6:9] )
+                ctable[i][j] = b
+                ctable[j][i] = b
+    geom.bonded_list(connex=ctable)
+    return geom, natom, header
 ##
