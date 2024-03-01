@@ -1,0 +1,35 @@
+***,Rh atom, (17/10) active space, MRCI
+! a 2F term alone
+memory,1500,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Rh}
+
+basis=cc-pwCVTZ-PP
+
+{rhf;wf,nelec=17,sym=1,spin=3}
+
+! first pass at orbitals
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=1; state,12;
+	weight,5[0],7[1]
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Prep and LL values
+
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=1; state,7;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and LL values
+
+{ci;wf,sym=1,spin=1;state,7;save,5101.2}
+hlsdiag = energd4
+
+table, hlsdiag

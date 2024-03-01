@@ -1,0 +1,76 @@
+***,Rh atom, (17/10) active space
+! 4F,4P,4F + 2F,2D,2P,2G (b 2D missed)
+! Hybrid SO-CI using opt-MRCI+Q/displ
+memory,1500,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Rh}
+
+basis=cc-pwCVTZ-PP
+
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=3; state,17;
+    wf,nelec=17,sym=1,spin=1; state,24;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and LL values
+
+{ci;wf,sym=1,spin=3;state,17;save,5103.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=1;state,24;save,5101.2}
+hlsdiag(18) = energd4
+
+table, hlsdiag
+
+! replace with opt-MRCI+Q energies
+! 2D after 2F
+HLSDIAG(1)=-110.016507
+HLSDIAG(2)=-110.016507
+HLSDIAG(3)=-110.016507
+HLSDIAG(4)=-110.016507
+HLSDIAG(5)=-110.016507
+HLSDIAG(6)=-110.016507
+HLSDIAG(7)=-110.016507
+HLSDIAG(8)=-109.975123
+HLSDIAG(9)=-109.975123
+HLSDIAG(10)=-109.975123
+HLSDIAG(11)=-109.991822
+HLSDIAG(12)=-109.991822
+HLSDIAG(13)=-109.991822
+HLSDIAG(14)=-109.991822
+HLSDIAG(15)=-109.991822
+HLSDIAG(16)=-109.991822
+HLSDIAG(17)=-109.991822
+HLSDIAG(18)=-109.960044
+HLSDIAG(19)=-109.960044
+HLSDIAG(20)=-109.960044
+HLSDIAG(21)=-109.960044
+HLSDIAG(22)=-109.960044
+HLSDIAG(23)=-109.960044
+HLSDIAG(24)=-109.960044
+HLSDIAG(25)=-109.995136
+HLSDIAG(26)=-109.995136
+HLSDIAG(27)=-109.995136
+HLSDIAG(28)=-109.995136
+HLSDIAG(29)=-109.995136
+HLSDIAG(30)=-109.958296
+HLSDIAG(31)=-109.958296
+HLSDIAG(32)=-109.958296
+HLSDIAG(33)=-109.946283
+HLSDIAG(34)=-109.946283
+HLSDIAG(35)=-109.946283
+HLSDIAG(36)=-109.946283
+HLSDIAG(37)=-109.946283
+HLSDIAG(38)=-109.946283
+HLSDIAG(39)=-109.946283
+HLSDIAG(40)=-109.946283
+HLSDIAG(41)=-109.946283
+table, hlsdiag
+
+!compute and diagonalize SO matrix
+{ci;hlsmat,ecp,5103.2,5101.2;print,vls=0,hls=0}
+

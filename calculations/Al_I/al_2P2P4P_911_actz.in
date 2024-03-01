@@ -1,35 +1,36 @@
-***,F SO-CI
+***,Al SO-CI
+! Active space (9/11) is 2p3s3p + 4s4p
 memory,1000,M;
 
 gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
 
 symmetry,xyz
-geometry={F};
+geometry={Al};
 
 basis=aug-cc-pwCVTZ-DK
 
 set,dkho=101
 
-!{rhf;wf,nelec=9,sym=2,spin=1}
+{rhf;wf,nelec=13,sym=2,spin=1}
 
-! Active space (5/8) to get 3p orbs
+! K shell closed but not frozen
 {multi
-    closed,1,0;
-    occ,3,6
-    wf,sym=2,spin=1;state,3; lquant,1,1,0
-        weight,all,99
-    wf,sym=2,spin=3;state,3; lquant,1,1,0
-        weight,all,1
+    closed,2,0;
+    occ,4,9
+    wf,sym=2,spin=1;state,6;
+    wf,sym=2,spin=3;state,3;
     expec2,lxx,lyy,lzz;
 }
 table, energy, ll
 title, Energies and <L**2> values
 
----
-{ci;wf,sym=2,spin=1;state,3; save,5201.2}
+core,1,0
+
+{ci;wf,sym=2,spin=1;state,6; save,5201.2}
 hlsdiag = energd4
 {ci;wf,sym=2,spin=3;state,3; save,5203.2}
-hlsdiag(4) = energd4
+hlsdiag(7) = energd4
 
 table,hlsdiag
 

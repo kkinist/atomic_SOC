@@ -1,0 +1,38 @@
+***,Ar SO-CI
+! active space (8/8)
+memory,1000,M;
+
+gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
+
+symmetry,xyz
+geometry={Ar};
+
+basis=aug-cc-pwCVTZ-DK
+
+set,dkho=101
+
+! cation orbitals
+{rhf;wf,nelec=17,sym=1,spin=1}
+
+{multi
+    closed,2,3
+    occ,4,9
+    wf,nelec=18,sym=1,spin=0;state,10;
+    wf,nelec=18,sym=1,spin=2;state,1; 
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,1,0
+
+{ci;wf,sym=1,spin=0;state,10; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,1; save,5202.2}
+hlsdiag(11) = energd
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,ls,5201.2,5202.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

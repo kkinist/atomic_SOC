@@ -1,0 +1,25 @@
+***,Rh atom, (17/10) active space, MRCI
+! a 2D term alone
+memory,1500,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Rh}
+
+basis=cc-pwCVTZ-PP
+
+{rhf;wf,nelec=17,sym=1,spin=1}
+
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=1; state,5;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and LL values
+
+{ci;wf,sym=1,spin=1;state,5;save,5101.2}
+hlsdiag = energd4
+
+table, hlsdiag

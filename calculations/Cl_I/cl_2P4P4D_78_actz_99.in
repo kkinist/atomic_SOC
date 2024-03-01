@@ -1,34 +1,40 @@
-***,F SO-CI
-memory,1000,M;
+***,Cl SO-CI
+! active space (7/8)
+memory,1500,M;
 
 gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
 
 symmetry,xyz
-geometry={F};
+geometry={Cl};
 
 basis=aug-cc-pwCVTZ-DK
 
 set,dkho=101
 
-! start with dication to get better 3s3p orbitals
-{rhf,so-sci;wf,nelec=7,sym=2,spin=3}
+{rhf;wf,nelec=17,sym=2,spin=1}
 
-! Active space (7/8) to get 3p orbs
 {multi
-    closed,1,0;
-    occ,3,6
-    wf,nelec=9,sym=2,spin=1;state,3; 
-    wf,nelec=9,sym=2,spin=3;state,3; 
+    closed,2,3
+    occ,4,9
+    wf,sym=2,spin=1;state,3;
+	weight,all,99
+    wf,sym=2,spin=3;state,8;
+	weight,all,1
     expec2,lxx,lyy,lzz;
 }
 table, energy, ll
 title, Energies and <L**2> values
 
+! only K-shell uncorrelated
+core,1,0
+
 {ci;wf,sym=2,spin=1;state,3; save,5201.2}
 hlsdiag = energd4
-{ci;wf,sym=2,spin=3;state,3; save,5203.2}
+{ci;wf,sym=2,spin=3;state,8; save,5203.2}
 hlsdiag(4) = energd4
 
 table,hlsdiag
 
+lsint
 {ci;hlsmat,ls,5201.2,5203.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

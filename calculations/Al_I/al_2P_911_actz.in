@@ -1,0 +1,34 @@
+***,Al SO-CI
+! Active space (9/11) is 2p3s3p + 4s4p
+memory,1000,M;
+
+gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
+
+symmetry,xyz
+geometry={Al};
+
+basis=aug-cc-pwCVTZ-DK
+
+set,dkho=101
+
+{rhf;wf,nelec=13,sym=2,spin=1}
+
+! K shell closed but not frozen
+{multi
+    closed,2,0;
+    occ,4,9
+    wf,sym=2,spin=1;state,3;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,1,0
+
+{ci;wf,sym=2,spin=1;state,3; save,5203.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5203.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

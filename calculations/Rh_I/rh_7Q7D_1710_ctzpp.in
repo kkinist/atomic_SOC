@@ -1,0 +1,30 @@
+***,Rh atom, (17/10) active space/core
+! 4F + 2F
+memory,1000,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Rh}
+
+basis=cc-pwCVTZ-PP
+
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=3; state,7;
+    wf,nelec=17,sym=1,spin=1; state,7;
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Energies and LL values
+
+{ci;wf,sym=1,spin=3;state,7;save,5103.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=1;state,7;save,5101.2}
+hlsdiag(8) = energd4
+
+table, hlsdiag
+
+!compute and diagonalize SO matrix
+{ci;hlsmat,ecp,5103.2,5101.2;print,vls=0,hls=0}
+

@@ -1,0 +1,34 @@
+***,Rh atom, (17/10) active space, MRCI
+! b 4F term preferred
+memory,1500,M;
+
+gprint,orbitals,civector
+
+symmetry,xyz
+geometry={Rh}
+
+basis=cc-pwCVTZ-PP
+
+! first pass gets b4F below 4P
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=3; state,17;
+	weight,7[0],10[1]
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Preparatory energies and LL values
+
+{multi
+    closed,0,0
+    wf,nelec=17,sym=1,spin=3; state,14;
+	!weight,7[1],7[4]
+    expec2,lxx,lyy,lzz;
+ }
+table, energy, ll
+title, Preparatory energies and LL values
+
+{ci;option,natorb=1,nstate=14;wf,sym=1,spin=3;state,14;save,5103.2}
+hlsdiag = energd4
+
+table, hlsdiag

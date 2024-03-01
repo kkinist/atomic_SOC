@@ -1,0 +1,30 @@
+***,Na SO-CI
+memory,1000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Na};
+
+basis=aug-cc-pwCVTZ-DK
+
+set,dkho=101
+
+{rhf;wf,nelec=11,sym=1,spin=1}
+
+! Active space (1/2)
+{multi
+    closed,2,3
+    occ,4,3
+    wf,sym=1,spin=1;state,2;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+{ci;wf,sym=1,spin=1;state,2; save,5201.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5201.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

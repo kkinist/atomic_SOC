@@ -18,7 +18,7 @@ set,dkho=101
     closed,1,0;
     occ,3,6
     wf,nelec=9,sym=2,spin=1;state,3; 
-    wf,nelec=9,sym=2,spin=3;state,3; 
+    wf,nelec=9,sym=2,spin=3;state,8; 
     expec2,lxx,lyy,lzz;
 }
 table, energy, ll
@@ -26,7 +26,7 @@ title, Energies and <L**2> values
 
 {ci;wf,sym=2,spin=1;state,3; save,5201.2}
 hlsdiag = energd4
-{ci;wf,sym=2,spin=3;state,3; save,5203.2}
+{ci;wf,sym=2,spin=3;state,8; save,5203.2}
 hlsdiag(4) = energd4
 
 table,hlsdiag
