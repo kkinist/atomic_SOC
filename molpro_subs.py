@@ -1905,15 +1905,22 @@ class fullmatSOCI:
         dfstate = self.state_contributions_from_term(termlabel=termlabel, thr=-np.inf)
         if cols is None:
             # use default
-            cols = ['E', 'cm-1', 'Ω', 'label', 'exc', 'g', 'Olbl']
+            if self.isatom:
+                #chem.print_err('', 'not working for atoms')
+                cols = ['E', 'Erel', 'Eshift', 'J', 'Lead', 'Jlbl']
+            else:
+                cols = ['E', 'cm-1', 'Ω', 'label', 'exc', 'g', 'Olbl']
         df = self.dfso[cols].copy()
         term = dfstate.columns.tolist()[-1]
-        #iterm = self.dfterm.index[self.dfterm.Term == term][0]
-        df[term] = 0
-        for ist, il in enumerate(self.ilvl):
-            df.loc[il, term] += dfstate.loc[ist, term]
+        if self.isatom:
+            iterm = self.dfterm.index[self.dfterm.Term == term][0]
+            df[term] = [twts[iterm] for twts in self.dfso.termwt]
+        else:
+            df[term] = 0
+            for ist, il in enumerate(self.ilvl):
+                df.loc[il, term] += dfstate.loc[ist, term]
         if normalize:
-            # normalize term's contributsion to levels
+            # normalize term's contributions to levels
             df[term] = df[term] / df[term].sum()
         df = df[df[term] >= thr]
         return df
