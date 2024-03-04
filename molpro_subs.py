@@ -5301,9 +5301,10 @@ def read_Molpro_matrix(fname,
 def total_charge(fpro, verbose=False):
     # MOLPRO does not report total charge; compute it here from atomic 
     # charges and (last) electron count
-    coords = read_coordinates(fpro)
-    # use last coordinates
-    coord = coords[-1]
+    coord = read_coordinates(fpro)
+    # use last coordinates, if a list
+    if isinstance(coord, list):
+        coord = coord[-1]
     Geom = chem.Geometry(coord, intype='DataFrame')
     ztot = Geom.Ztot()  # based upon atomic number
     qtot = coord.q.sum()  # based upon reported atomic charges (ECP effect)
@@ -5355,11 +5356,11 @@ def Ztot(fpro):
 ##
 def stoichiometry(fpro, ones=False, charge=True):
     # return a stoichiometry string
-    coords = read_coordinates(fpro)
-    # use only the last set of coordinates
-    coord = coords[-1]
+    coord = read_coordinates(fpro)
+    # use only the last set of coordinates, if a list
+    if isinstance(coord, list):
+        coord = coord[-1]
     Geom = chem.Geometry(coord, intype='DataFrame')
-    Geom.print()
     Geom.charge = total_charge(fpro)
     stoich = Geom.stoichiometry(ones=ones, charge=charge)
     return stoich
