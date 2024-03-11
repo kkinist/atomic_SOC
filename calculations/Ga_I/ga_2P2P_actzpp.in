@@ -1,0 +1,31 @@
+***,Ga SO-CI
+memory,1500,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Ga};
+
+basis=aug-cc-pwCVTZ-PP
+
+! cation orbitals
+!{rhf;wf,nelec=20,sym=1,spin=0}
+rhf
+
+{multi
+    closed,6,3
+    occ,8,6
+    wf,nelec=21,sym=2,spin=1;state,6;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=2,spin=1;state,6; save,5201.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5201.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
