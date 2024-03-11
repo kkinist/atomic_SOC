@@ -898,7 +898,7 @@ class SOenergy:
     def get_energies(self):
         # return a DataFrame of state energies
         re_data = re.compile(r'\s+\d+\s+\d(\s+[-]?\d+\.\d+){6}')
-        re_alt = re.compile(r'\s+\d+(\s+[-]?\d+\.\d+){6}')
+        re_alt = re.compile(r'\s+\d+(\s*[-]?\d+\.\d+){6}')  # spaces may be overwritten
         Nr = []
         Sym = []
         E = []
@@ -913,7 +913,8 @@ class SOenergy:
                 cm.append(float(words[4]))  # E-E0
                 excit.append(float(words[6]))  # E-E(1) in cm-1
             if re_alt.match(line):
-                words = line.split()
+                # in case spaces have been overwritten, replace '-' with ' -'
+                words = line.replace('-', ' -').split()
                 Nr.append(int(words[0]))
                 Sym.append(0)  # not present in half-integer output, say irrep=0
                 E.append(float(words[1]))
@@ -3643,7 +3644,7 @@ def readSOenergy(fname, recalc=False, linenum=False):
     # Probably need "hls=0" in the SO-CI print parameters to have E0 printed
     re_vals = re.compile(r' Eigenvalues of the spin-orbit matrix| Spin-orbit eigenstates')
     re_end = re.compile(r' E0 =\s+([-]?\d+\.\d+) is the energy of the lowest zeroth-order state')
-    re_e0alt = re.compile(r' Lowest unperturbed energy E0=\s+([-]?\d+\.\d+)')
+    re_e0alt = re.compile(r' Lowest unperturbed energy E0=\s*([-]?\d+\.\d+)')  # space may be missing
     re_endalt = re.compile(r' Eigenvectors of spin-orbit ')
     sobuf = []
     retlist = []
