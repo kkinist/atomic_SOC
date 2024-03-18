@@ -87,7 +87,7 @@ class MULTI:
         self.groups = self.parseGroups()
         self.results = self.parseResults(atom=atom)
         self.termLabels(parity=parity, quiet=quiet)
-        self.NOs = self.natorb_info(quiet=quiet)
+        self.NOs = self.natorb_info(quiet=quiet, require=False)
         self.civec = self.parseMULTIcivec()
     def print(self):
         print('{:d} closed-shell orbitals'.format(self.nfrozen))
@@ -332,8 +332,9 @@ class MULTI:
             if not quiet:
                 chem.print_err('', 'Unable to assign term symbol', halt=False)
         return
-    def natorb_info(self, quiet=False):
+    def natorb_info(self, quiet=False, require=True):
         # return a DataFrame describing the natural orbitals
+        # If require==False, print warning instead of error when NO's are missing
         rx_NO = re.compile('\s+NATURAL ORBITALS')
         rx_end = re.compile('Total charge:')
         rx_data = re.compile('\s+\d+\.\d\s+[-]?\d\.\d+')
@@ -366,7 +367,8 @@ class MULTI:
                     while words:
                         if len(words) % nfield:
                             # number of fields does not make sense
-                            chem.print_err('', f'Composition fields not a multiple of {nfield}: {len(words)}')
+                            chem.print_err('', f'Composition fields not a multiple of {nfield}: {len(words)}',
+                                           halt=require)
                         if isatom:
                             c.append((int(words[0]), -1, words[1], float(words[2])))
                         else:
@@ -408,7 +410,8 @@ class MULTI:
         if np.array(vocc).any():
             vocc = self.nactorb(irreps=True)
             nirrep = np.unique(irrep, return_counts=True)[1]  # np.unique returns two arrays
-            chem.print_err('', f'Number of active orbitals {vocc} exceeds number of NOs {nirrep}; try "gprint,orbitals,civector"')
+            chem.print_err('', f'Number of active orbitals {vocc} exceeds number of NOs {nirrep}; try "gprint,orbitals,civector"',
+                           halt=require)
         data = {k: v for k, v in zip(cols, [orb, occ, activ, e, comp, terse])}
         df = pd.DataFrame(data)
         if len(df):
