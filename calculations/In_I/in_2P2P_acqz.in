@@ -1,0 +1,32 @@
+***,In SO-CI
+memory,2000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={In};
+
+basis=aug-cc-pwCVQZ-DK
+
+set,dkho=101
+
+! cation orbitals
+{rhf;wf,nelec=48,sym=1,spin=0}
+
+{multi
+    occ,16,15
+    closed,14,9
+    wf,nelec=49,sym=2,spin=1;state,6;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,8,6
+
+{ci;wf,sym=2,spin=1;state,6; save,5201.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5201.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
