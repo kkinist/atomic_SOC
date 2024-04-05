@@ -15,7 +15,8 @@ from sklearn.cluster import KMeans
 #sys.path.insert(1, r'C:\Users\irikura\Documents\GitHub\bin3dev')
 import chem_subs as chem
 ##
-SPINMULT = {0: 'Singlet', 1: 'Triplet', 0.5: 'Doublet', 1.5: 'Quartet', 2: 'Quintet'}
+SPINMULT = {0: 'Singlet', 1: 'Triplet', 0.5: 'Doublet', 1.5: 'Quartet', 2: 'Quintet',
+            2.5: 'Sextet', 3: 'Septet', 3.5: 'Octet', 4: 'Nonet', 4.5: 'Decet'}
 MULTSPIN = {v: k for k, v in SPINMULT.items()}
 LAMBDA = {0: 'Sigma', 1: 'Pi   ', 2: 'Delta', 3: 'Phi  ', 4: 'Gamma'}
 LSYMB = ['S', 'P', 'D', 'F', 'G', 'H']
