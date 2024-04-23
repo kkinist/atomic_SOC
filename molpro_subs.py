@@ -3909,6 +3909,7 @@ def readSOmatrixBlocks(fname):
     rx_symm_ad = re.compile(r'Spin-orbit calculation in the basis of symmetry adapted')
     retval = []
     lineno = []
+    len_somat = 0
     with open(fname, 'r', errors='replace') as F:
         somatbuf = []
         in_somat = False
@@ -3916,6 +3917,7 @@ def readSOmatrixBlocks(fname):
             if in_somat:
                 if rx_energ.match(line) or rx_symm_ad.search(line):
                     # end of block
+                    len_somat = len(somatbuf)
                     retval.append(somatbuf)
                     in_somat = False
                     somatbuf = []
@@ -3924,6 +3926,9 @@ def readSOmatrixBlocks(fname):
             if rx_somat.match(line):
                 in_somat = True
                 lineno.append(lno)
+    if len_somat == 0:
+        # Did not find matrix elements
+        chem.print_err('', "No matrix elements!\n\t\tPlease re-run using 'print,vls=0,hls=0' in SO-CI")
     return retval, lineno
 ##
 def parse_SOmatrix(buf, dimen):
