@@ -1,0 +1,38 @@
+***,Ba SO-CI
+memory,1000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Ba};
+
+basis=aug-cc-pwCVTZ-X2C
+
+set,dkho=101
+
+{rhf;wf,sym=1,spin=0}
+
+NSING=12
+NTRIP=16
+
+! active space (2/10)
+{multi
+    closed,15,12
+    occ,22,15
+    wf,sym=1,spin=0;state,NSING;
+    wf,sym=1,spin=2;state,NTRIP;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,9,9
+{ci;wf,sym=1,spin=0;state,NSING; save,5101.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5103.2}
+hlsdiag(NSING+1) = energd4
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,ls,5101.2,5103.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

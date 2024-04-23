@@ -1,0 +1,37 @@
+***,Ca SO-CI
+memory,1000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Ca};
+
+basis=aug-cc-pwCVTZ-DK
+
+set,dkho=101
+
+{rhf;wf,nelec=20,sym=1,spin=0}
+
+NSING=7
+NTRIP=9
+
+! Active space (2/10)
+{multi
+    closed,3,6
+    occ,10,9
+    wf,sym=1,spin=0;state,NSING;
+    wf,sym=1,spin=2;state,NTRIP;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,2,3
+{ci;wf,sym=1,spin=0;state,NSING; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5301.2}
+hlsdiag(NSING+1) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5201.2,5301.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

@@ -1,0 +1,35 @@
+***,Ge SO-CI
+! Active space (4,4)
+memory,1000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Ge};
+
+basis=aug-cc-pwCVTZ-DK
+
+set,dkho=101
+
+! spherical anion (4S) orbitals
+{rhf;wf,nelec=33,sym=2,spin=3}
+
+NTRIP=3
+NSING=0
+
+{multi
+    wf,nelec=32,sym=1,spin=2;state,NTRIP;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+! free KL shells
+core,2,3
+
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5203.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5203.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
