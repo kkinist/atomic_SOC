@@ -1,0 +1,39 @@
+***,Ra SO-CI
+! larger core [15 19]
+memory,8,G
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Ra};
+
+basis=aug-cc-pwCVQZ-X2C
+
+set,dkho=101
+
+{rhf,so-sci;wf,sym=1,spin=0}
+
+NSING=7
+NTRIP=16
+
+! active space (2/10) as orbitals [7 3]
+{multi
+    closed,21,22
+    occ,28,25
+    wf,sym=1,spin=0;state,NSING;
+    wf,sym=1,spin=2;state,NTRIP;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,15,19
+{ci;wf,sym=1,spin=0;state,NSING; save,5101.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5103.2}
+hlsdiag(NSING+1) = energd4
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,ls,5101.2,5103.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
