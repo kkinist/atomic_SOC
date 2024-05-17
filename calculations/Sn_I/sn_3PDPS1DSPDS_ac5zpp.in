@@ -1,0 +1,45 @@
+***,Sn SO-CI
+memory,1500,M;
+
+gprint,orbitals,civector;
+!gthresh,twoint=1.d-14,step=1.d-9,gradient=1.d-9,energy=1.d-10
+
+symmetry,xyz
+geometry={Sn};
+
+basis=aug-cc-pwCV5Z-PP
+
+! spherical anion orbitals (4S odd)
+{rhf; wf,nelec=23,sym=2,spin=3}
+
+! seek spherical orbitals using preliminary MCSCF
+!{multi
+!    !wf,nelec=22,sym=1,spin=2; state,3
+!    wf,nelec=22,sym=1,spin=0; state,5
+!    expec2,lxx,lyy,lzz;
+!}
+
+NTRIP=12
+NSING=15
+
+! add 6p to active space
+{multi
+    closed,6,3
+    occ,7,9
+    wf,nelec=22,sym=1,spin=2;state,NTRIP;
+    wf,nelec=22,sym=1,spin=0;state,NSING;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=0;state,NSING; save,5101.2}
+hlsdiag(NTRIP+1) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5201.2,5101.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

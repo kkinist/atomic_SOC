@@ -1,0 +1,20 @@
+***,Sn SO-CI
+memory,900,M;
+
+gprint,orbitals,civector;
+gthresh,twoint=1.d-14,step=1.d-9,gradient=1.d-9,energy=1.d-10
+
+symmetry,xyz
+geometry={Sn};
+
+basis=aug-cc-pwCV5Z-PP
+
+! CASSCF for ground term 3P
+{multi
+    wf,nelec=22,sym=1,spin=2; state,3
+    expec2,lxx,lyy,lzz;
+}
+
+table, energy, ll
+title, Energies and L**2 values
+
