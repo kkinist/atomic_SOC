@@ -1503,17 +1503,28 @@ def min_to_exceed(bigser, target):
     larger = bigser[bigser >= target]
     return larger.min()
 ##
-def match_lineno(targno, numlist):
-    # return the index of the largest value in 'numlist' that does not exceed 'targno'
+def match_lineno(targno, numlist, below=True):
     # This is for matching up line numbers.
+    # Return the index of the largest value in 'numlist' that does not exceed 'targno'
+    #   If below==False, return the smallest value that exceeds 'targno'
     # Return None if nothing matches
     a = np.array(numlist)
-    idx = np.argwhere(a <= targno)
-    try:
-        i = idx.max()
-    except ValueError:
-        # no valid values
-        return None
+    if below:
+        # find largest index <= targno
+        idx = np.argwhere(a <= targno)
+        try:
+            i = idx.max()
+        except ValueError:
+            # no valid values
+            return None
+    else:
+        # find smallest index >= targno
+        idx = np.argwhere(a >= targno)
+        try:
+            i = idx.min()
+        except ValueError:
+            # no valid values
+            return None
     return i
 ##
 def ensure_file_handle(fF):
@@ -1526,19 +1537,25 @@ def ensure_file_handle(fF):
         F = fF
     return F
 ##
-def find_line_number(file, search_string, case=True):
+def find_line_number(file, search_string, case=True, linelist=False):
     # return a list of line numbers for lines that include the search string
     F = ensure_file_handle(file)
     lineno = []
+    lines = []  # list of matching lines
     for i, line in enumerate(F):
         if case:
             if search_string in line:
                 lineno.append(i)
+                lines.append(line)
         else:
             # case-insensitive when case == False
             if search_string.lower() in line.lower():
                 lineno.append(i)
-    return lineno
+                lines.append(line)
+    if linelist:
+        return lineno, lines
+    else:
+        return lineno
 ##
 def hartree_eV(energy, direction='to_eV', multiplier=1):
     # convert from hartree to eV or the reverse (if direction == 'from_eV')
