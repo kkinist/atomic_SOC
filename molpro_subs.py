@@ -419,10 +419,10 @@ class MULTI:
             return df
         else:
             return None
-    def parseMULTIcivec(self, thresh=0.1):
+    def parseMULTIcivec(self, thresh=0.05):
         # For each MCSCF state, assign a list of configurations and
         #   corresponding list of coefficients (must exceed 'thresh')
-        rx_hdr = re.compile(r'CI (?:vector for state|Coefficients of) symmetry\s*(\d+)')
+        rx_hdr = re.compile(r'CI (?:vector for state|Coefficients of) symmetry\s*(\d+)|CI vector')
         rx_end = re.compile('TOTAL ENERGIES|Energy: ')
         rx_data = re.compile('(\s+[20ab]+)+(\s+[-]?\d\.\d+)+')
         rx_occ = re.compile('([20ab]+\s+)+')
@@ -602,7 +602,7 @@ class MRCI:
         #self.nact = x[3]
         self.results = self.properties()
         self.nstate = len(self.results)
-        self.configs = self.config_coeffs()
+        self.configs = self.config_coeffs(header=True)
         self.record = self.record_number()
         self.spaces()
     def printlines(self):
@@ -670,7 +670,7 @@ class MRCI:
             #    nact = int(m.group(1))
         #return irrep, spinLabel, ncore, nact
         return irrep, spinLabel, ncore
-    def config_coeffs(self):
+    def config_coeffs(self, header=False):
         # return a DataFrame of the reference coefficients > 0.05
         # not orthornormal because of the 0.05 cutoff
         rx_coeff = re.compile(r' Reference coefficients greater than 0.0500000')
@@ -707,7 +707,18 @@ class MRCI:
                     allc.extend(coeffs)
             if rx_coeff.match(line):
                 incoef = True
-        return df.T
+        dfc = df.T.copy()
+        if header:
+            # create column names
+            dfc = dfc.reset_index()
+            newcol = []
+            for i, col in enumerate(dfc.columns):
+                if i == 0:
+                    newcol.append('config')
+                else:
+                    newcol.append(f'c_{i}')
+            dfc = dfc.rename({old: new for old, new in zip(dfc.columns, newcol)}, axis=1)
+        return dfc
     def properties(self):
         # return a DataFrame of interesting properties
         rx_energy = re.compile(r' !(?:MRCI|CI\(SD\)) STATE\s*(\d+\.\d) Energy\s+([-]?\d+\.\d+)')
