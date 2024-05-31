@@ -422,7 +422,7 @@ class MULTI:
     def parseMULTIcivec(self, thresh=0.05):
         # For each MCSCF state, assign a list of configurations and
         #   corresponding list of coefficients (must exceed 'thresh')
-        rx_hdr = re.compile(r'CI (?:vector for state|Coefficients of) symmetry\s*(\d+)|CI vector')
+        rx_hdr = re.compile(r'CI (?:vector for state|Coefficients of) symmetry\s*(\d+)|CI vector\b')
         rx_end = re.compile('TOTAL ENERGIES|Energy: ')
         rx_data = re.compile('(\s+[20ab]+)+(\s+[-]?\d\.\d+)+')
         rx_occ = re.compile('([20ab]+\s+)+')
@@ -461,8 +461,8 @@ class MULTI:
             if m:
                 grp += 1
                 group = self.groups[grp - 1]
-                #if grp != group['gNum']:
-                #    chem.print_err('', 'Found group {:d} but expected {:d}'.format(grp, group['gNum']))
+                if grp != group['gNum']:
+                    chem.print_err('', 'Found group {:d} but expected {:d}'.format(grp, group['gNum']))
                 nstate = group['nStates']
                 vecs = [[] for n in range(nstate)] 
                 coeffs = [[] for n in range(nstate)] 
