@@ -1666,7 +1666,9 @@ class fullmatSOCI:
             self.props = readSOprops(fpro)
             if not len(self.props):
                 # try the even-electron version
+                print('--- using readSOprops_even() ---')
                 self.props = readSOprops_even(fpro)
+        return
     def diagonalize(self, store=False, vectors=False, sortval=True):
         # compute squared eigenvectors and eigenvalues
         # if 'store' == False, return (vals, vecsq, ciwt) and do not modify attributes
@@ -1812,7 +1814,7 @@ class fullmatSOCI:
         return df
     def assign_omega(self, csq_thresh=0.0001, silent=False, ordering='up', 
                      failure='crash', debug=False, 
-                     props=['<i|z|i>', '<i|R|1>**2']):
+                     props=['<i|z|i>', '<i|R|1>']):
         # if failure=='OK', continue despite failure in Omega assignments
         # include listed properties as available in DataFrame self.props
         dfstates, ok = SO_assign_omega(self.mrci, self.basis, self.SOe, self.vecsq,
@@ -3618,7 +3620,7 @@ def averageTermsApprox(dfci, be_close=None, target=None, be_same=None,
     try:
         iterm = be_same.index('Term')
     except ValueError:
-        chem.print_err('', '"Term" must be includeded in "be_close"')
+        chem.print_err('', '"Term" must be included in "be_close"')
     dfret = pd.DataFrame(columns=be_same + be_close + ['idx'])
     for grp, gdf in dfci.groupby(be_same):
         ds = gdf.sort_values(be_close[iterm])
@@ -3706,11 +3708,8 @@ def readSOenergy(fname, recalc=False, linenum=False):
 def readSOprops(fname, linenum=False):
     # Return a DataFrame (or list thereof) of dipole properties of SO states
     #   for odd-electron system like neutral PtH
-    retlist = []
+    retval = []  # list of DataFrames, one for each SO-CI
     lineno = []
-    dip = {'x': -1, 'y': -1, 'z': -1}  # diagonal dipole
-    tdipR = {'x': -1, 'y': -1, 'z': -1} # transition dipole from ground state (real component)
-    tdipI = {'x': -1, 'y': -1, 'z': -1} # transition dipole from ground state (imag component)
     re_start = re.compile(' Property matrices transformed in SO basis')
     re_end = re.compile(' \*{25}')
     re_eltype = re.compile(r'<i\|DM([XYZ])\|([i1])>')  # type of element
@@ -3720,78 +3719,192 @@ def readSOprops(fname, linenum=False):
     re_imag = re.compile(r' IMAG PART  \(a\.u\.\):(\s+[-]?\d+\.\d+)+')
     re_tdipnr = re.compile(r'^(\s+\d+)+$')
     inblock = False
-    el = dfret = None
+    #el = dfret = None
     havenr = False
+    # Sometimes Molpro doesn't print all the matrix elements.  That is
+    #   intentional and means that that whole row is zeros. 
+    # "mu" is a dict of lists of (transition) dipoles; key = dipole type
+    #   for complex types, each dict element is a list of two lists
+    mu = {}    
+    nrmu = {}  # dict of lists of matrix element numbers; key = dipole type
+    nr = []
+    columns = []
+    nstate = 0  
     with open(fname, 'r', errors='replace') as F:
         for lno, line in enumerate(F):
             if inblock:
                 if re_end.match(line):
                     inblock = False
-                    # save results for this block
-                    dfret = pd.DataFrame({'Nr': np.array(nr).astype(int)})
-                    momsq = 0
-                    for el, val in dip.items():
-                        if val is not None:
-                            mu_i1 = np.array(val).astype(float)
-                            dfret[f'<i|{el}|i>'] = mu_i1
-                            momsq += np.abs(mu_i1) ** 2
-                    for el in ['x', 'y', 'z']:
-                        if not len(tdipR[el]):
-                            # no non-zero values
+                    # create DataFrame of results for this block
+                    # find number of states (because some elements might be missing)
+                    nstate = 0
+                    for diptype, nrs in nrmu.items():
+                        nstate = max([nstate] + [int(n) for n in nrs])
+                    nrfull = sorted(range(1, nstate+1))  # complete list of state numbers
+                    df2 = pd.DataFrame(columns=columns)
+                    df2['Nr'] = nrfull
+                    for diptype in columns[1:]:
+                        if r'|1>' in diptype:
+                            # complex-valued
+                            dip = np.zeros(nstate, dtype=complex)
+                        else:
+                            # real-valued
+                            dip = np.zeros(nstate, dtype=float)
+                        if mu[diptype] is None:
+                            # No values above the printing threshold; fill with zeros
+                            df2[diptype] = dip
                             continue
-                        valR = np.array(tdipR[el]).astype(float)
-                        valI = np.array(tdipI[el]).astype(float)
-                        cdip = valR + 1j * valI
-                        dfret[f'<i|{el}|1>'] = cdip
-                    # compute sum of squares of transition moments
-                    dfret['<i|R|1>**2'] = momsq
-                    retlist.append(dfret)
-                    continue
+                        # Put actual values into array 'dip'
+                        for i, nr in enumerate(nrmu[diptype]):
+                            # 'i' is index into mu[diptype] array(s) of values
+                            # 'n' is index into buffer array dip[]
+                            n = int(nr) - 1  
+                            if r'|1>' in diptype:
+                                # complex-valued
+                                c = float(mu[diptype][0][i]) + float(mu[diptype][1][i])*1j
+                                dip[n] = c
+                            else:
+                                # real-valued
+                                dip[n] = float(mu[diptype][i])
+                        df2[diptype] = dip
+                    # combine X, Y, Z components
+                    for dipclass in [r'|i>', r'|1>']:
+                        momsq = np.zeros(nstate, dtype=float)
+                        for compon in 'xyz':
+                            diptype = r'<i|' + compon + dipclass
+                            v = df2[diptype].values
+                            if '1' in diptype:
+                                # complex-valued
+                                v = np.abs(v)
+                            v = v ** 2
+                            momsq = (momsq + v).astype(float)
+                        rdip = diptype.replace(compon, 'R')
+                        mom = np.sqrt(momsq)
+                        df2[rdip] = mom
+                    retval.append(df2)
                 m = re_eltype.search(line)
                 if m:
-                     # some kind of dipole
-                    el = m.group(1).lower()  # component [XYZ]
+                    # some kind of dipole
+                    diptype = m.group(0).replace('DM', '').lower()
+                    columns.append(diptype)
+                    if len(nr):
+                        nstate = max([int(n) for n in nr])
                     if m.group(2) == 'i':
                         # dipole component
+                        mu[diptype] = []
+                        nrmu[diptype] = []
                         if 'No matrix element' in line:
-                            dip[el] = None
-                            el = None
+                            #el = None
+                            mu[diptype] = None
                         else:
-                            dip[el] = []
                             nr = []  # state numbers
                             havenr = True
                     elif m.group(2) == '1':
                         # transition dipole component
-                        tdipR[el] = []  # real component
-                        tdipI[el] = []  # imag component
                         nr = []
                         havenr = True
+                        mu[diptype] = [[], []]
+                        nrmu[diptype] = []
                     else:
                         # should never get here
                         print('group2 = ', m.group(2))
                 if re_real.match(line):
-                    tdipR[el] = tdipR[el] + line.split()[3:]
+                    mu[diptype][0] +=  line.split(':')[-1].split()
                 if re_imag.match(line):
-                    tdipI[el] = tdipI[el] + line.split()[3:]
+                    mu[diptype][1] +=  line.split(':')[-1].split()
                 if re_tdipnr.match(line) and havenr:
                     nr = nr + line.split()
+                    nrmu[diptype] += line.split()
                 if re_dipnr.match(line) and havenr:
                     nr = nr + line.split()[1:]
+                    nrmu[diptype] += line.split()[1:]
                 if re_dip.match(line):
-                    dip[el] = dip[el] + line.split()[1:]
+                    mu[diptype] += line.split()[1:]
             if re_start.match(line):
                 inblock = True
                 lineno.append(lno)
+                columns = ['Nr']  # columns for DataFrame
     if linenum:
-        if len(retlist) == 1:
-            return retlist[0], lineno[0]
+        if len(retval) == 1:
+            return retval[0], lineno[0]
         else:
-            return retlist, lineno
+            return retval, lineno
     else:
-        if len(retlist) == 1:
-            return retlist[0]
+        if len(retval) == 1:
+            return retval[0]
         else:
-            return retlist
+            return retval
+##
+def readSOprops_alt(fname):
+    # Return a DataFrame of dipole properties of SO states
+    #   for even-electron system like PtH- anion
+    # Intended for a single geometry
+    re_start = re.compile(r'element[s]? <i\|DM')
+    re_end = re.compile('\*{25}')
+    re_eltype = re.compile(r'<i\|DM([XYZ])\|\s*([i1])>')
+    re_nr = re.compile(r'(\s+\d+)+$')
+    re_data = re.compile(r'(\s+[-]?\d+\.\d+)+$')
+    mu = {}    
+    nrmu = {}  # dict of lists of matrix element numbers; key = dipole type
+    columns = ['Nr']  # headings for the DataFrame
+
+    inblock = False
+    nstates = 0  # the total number of states (with luck)
+    with open(fname, 'r', errors='replace') as F:
+        for line in F:
+            if re_start.search(line):
+                inblock = True
+            if inblock:
+                m = re_eltype.search(line)
+                if m:
+                    diptype = '<i|{:s}|{:s}>'.format(m.group(1).lower(), m.group(2))
+                    columns.append(diptype)
+                    if 'No matrix element' in line:
+                        # all zero
+                        mu[diptype] = nrmu[diptype] = None
+                    else:
+                        # values will be read
+                        if '1' in diptype:
+                            # complex-valued transition moment needs two lists
+                            mu[diptype] = [[], []]
+                            nrmu[diptype] = []
+                        else:
+                            # real-valued
+                            mu[diptype] = []
+                            nrmu[diptype] = []
+                m = re_nr.search(line)
+                if m:
+                    nvals = m.group(0).split()
+                    nrmu[diptype] += nvals
+                    nstates = max([nstates] + [int(n) for n in nvals])
+                    continue
+                m = re_data.search(line)
+                if m:
+                    if 'Real Part' in line:
+                        mu[diptype][0] += [float(x) for x in m.group(0).split()]
+                    elif 'Imag Part' in line:
+                        mu[diptype][1] += [float(x) for x in m.group(0).split()]
+                    else:
+                        mu[diptype] += [float(x) for x in m.group(0).split()]
+
+                if re_end.search(line):
+                    inblock = False
+    # create the DataFrame
+    print('>>>>columns =', columns)
+    print('>>>nstates =', nstates)   
+    '''
+    for diptype, nrs in nrmu.items():
+        print(diptype)
+        for i, nr in enumerate(nrs):
+            # i is index into nrmu[diptype] 
+            # n is index into mu[diptype]
+            n = int(nr) - 1
+            if '1' in diptype:
+                # complex-valued
+                mu[diptype][0] = 
+        print(mu[diptype])
+    '''
+    return
 ##
 def readSOprops_even(fname):
     # Return a DataFrame of dipole properties of SO states
@@ -3854,8 +3967,8 @@ def readSOprops_even(fname):
     momsq = 0
     for trdir, tvals in trans.items():
         momsq += np.array(tvals) ** 2
-    col = '<i|R|1>**2'
-    df[col] = momsq
+    col = '<i|R|1>'
+    df[col] = np.sqrt(momsq)
     return df
 ##
 '''
