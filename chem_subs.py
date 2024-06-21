@@ -7,7 +7,7 @@ from numba.core.errors import NumbaDeprecationWarning
 import warnings
 warnings.simplefilter('ignore', category=NumbaDeprecationWarning)
 
-import re, sys, os, subprocess
+import re, sys, os, subprocess, io
 #import string, copy
 import copy
 import numpy as np
@@ -3799,6 +3799,7 @@ def minimize_RMSD_rotation(G, Gref):
     def distmat(self, unit='', variant='', verbose=False):
         # 2D array of interatomic distances (distance matrix )
         # use unit if specified
+        # Assign to attribute "distance_matrix"
         # if variant = 'interfragment', zero out all distances
         #    within a bonded fragment 
         xyz = [a.xyz for a in self.atom]
@@ -3822,6 +3823,7 @@ def minimize_RMSD_rotation(G, Gref):
                 for i in frag:
                     for j in frag:
                         dmat[i, j] = 0.
+        self.distance_matrix = dmat
         return dmat
     def nuclear_repulsion_mat(self):
         # Return the symmetric matrix of internuclear repulsion energies
@@ -4426,6 +4428,14 @@ class LabeledGeometry(Geometry):
         # return the atom labels as a list
         labels = [a.label for a in self.atom]
         return labels
+    def element_labels(self, elem):
+        # return list of labels of atoms that match 'elem'
+        el = elz(elem, choice='symbol')
+        lbl = []
+        for at in self.atom:
+            if el == elz(at.el, choice='symbol'):
+                lbl.append(at.label)
+        return lbl
     def sortByLabel(self):
         # order atoms by increasing value of label
         labels = self.getLabels()
@@ -5036,20 +5046,49 @@ def readXmol(fh, units='angstrom', handle=False):
     # Return a three-tuple
     if not handle:
         fh = open(fh, 'r')
-    try:
-        natom = int( fh.readline() )
-        comment = fh.readline().rstrip()
-        df = pd.read_csv(fh, names=['El', 'X', 'Y', 'Z'], delim_whitespace=True)
-        # check the number of atoms
-        if natom != df.shape[0]:
-            print('Expected {:d} atoms but found {:d}!'.format(natom, df.shape[0]))
-            return None
-    except:
-        print('Unable to read XMol file')
+    else:
+        # file is aready open
+        pass
+    natom = int( fh.readline() )
+    comment = fh.readline().rstrip()
+    df = pd.read_csv(fh, names=['El', 'X', 'Y', 'Z'], delim_whitespace=True)
+    # check the number of atoms
+    if natom != df.shape[0]:
+        print('Expected {:d} atoms but found {:d}!'.format(natom, df.shape[0]))
         return None
     if not handle:
         fh.close()
     return Geometry(df, intype='DataFrame', units=units), natom, comment
+##
+def readXYZtraj(fname):
+    # Read an XYZ trajectory file
+    # Return a list of tuple (LabeledGeometry object, #atoms, comment)
+    retval = []
+    fh = open(fname, 'r')
+    print(f'Reading XYZ trajectory from file "{fname}"')
+    F = iter(fh)
+    line = next(F)
+    while line is not None:
+        # first line should be an integer (number of atoms)
+        natom = int(line.split().pop())
+        # second line is the comment
+        comment = next(F).rstrip()
+        # read coordinates
+        buf = []
+        for i in range(natom):
+            buf.append(next(F))
+        df = pd.read_csv(io.StringIO(''.join(buf)), names=['El', 'X', 'Y', 'Z'], delim_whitespace=True)
+        # check the number of atoms
+        if natom != df.shape[0]:
+            print('Expected {:d} atoms but found {:d}!'.format(natom, df.shape[0]))
+            return None
+        G = Geometry(df, intype='DataFrame')
+        # label with (ordinal) atom numbers
+        LG = LabeledGeometry.fromGeometry(G, range(1, natom+1))
+        retval.append( (LG, natom, comment) )
+        line = next(F, None)
+    print(f'   {len(retval)} structures read')
+    return retval
 ##
 def r0_ref( elem1, elem2 ):
     # return single-bonded distances between elements (Angstrom)
@@ -8596,7 +8635,10 @@ def displayDF(df, maxrows=0, fmt=None):
             with pd.option_context('display.max_rows', maxrows):
                 display(df)
         else:
-            display(df.style.format(fmt))
+            if fmt is None:
+                display(df)
+            else:
+                display(df.style.format(fmt))
     except NameError: 
         print(df)
     return
