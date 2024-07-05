@@ -2203,7 +2203,17 @@ class fullmatSOCI:
         dflev = dflev.sort_values('Erel').reset_index(drop=True)
         self.dfmicro = dfsoci
         self.dfso = dflev
-        return dflev
+        if errcond:
+            # Print possibly useful info
+            print('Consecutive energy differences (cm-1):')
+            dfdiff = self.SOe.results[['Nr', 'Eshift']].copy()
+            evec = dfdiff.Eshift.values
+            de = evec[1:] - evec[:-1]
+            dfdiff['diff'] = np.insert(de, 0, [0])
+            chem.displayDF(dfdiff)
+            return None
+        else:
+            return dflev
     def assign_atomic_J_old(self, csq_thresh, quiet=False):
         '''
         Assume the CASSCF degeneracies are good
@@ -2498,6 +2508,74 @@ class fullmatSOCI:
                 enew = edav + etransl
             dfnew.at[i, 'Enew'] = enew
         return dfnew
+##
+def parse_SOCI_full_dipole_matrix(fpro, dimen, ascomplex=False, aslist=True):
+    '''
+    Read a complete dipole transition matrix
+        requires HLS=1 in the SO-CI print statement
+    If 'complex', then:
+        Return a dict of three square numpy arrays of complex (one for each component X, Y, Z)
+        The first index in the arrays is the column
+    else:
+        Return a dict of dict of (six) square arrays of real (two for each cartesian)
+    If 'aslist', then return (lists of lists) instead of numpy arrays
+    'dimen' is the size of the matrix, i.e., the number of spin-orbit states
+    The defaults are best for dumping to YAML
+    '''
+    re_start = re.compile(' Property matrices transformed in SO basis \(not sym. adapted\)')
+    re_block = re.compile(r' DM([XYZ]) \(TRANSFORMED, (REAL|IMAG)\)')
+    re_blank = re.compile('^\s*$')
+    re_hdr = re.compile(r'(\s+\d+)+\s*$')
+    re_data = re.compile(r'\s*\d+(\s+[-]?\d+\.\d+)+\s*$')
+    started = inblock = False
+    vdict = {}  # key = 'X'|'Y'|'Z', value = {'REAL': array, 'IMAG': array}
+    with open(fpro, 'r') as F:
+        for line in F:
+            if started:
+                if re_blank.match(line):
+                    # end of a sub-section
+                    inblock = False
+                    continue
+                if inblock:
+                    if re_hdr.match(line):
+                        # numerical column headings
+                        ncol = [int(n) for n in line.split()]
+                    if re_data.match(line):
+                        # line of data, preceded by a row number
+                        w = line.split()
+                        nrow = int(w.pop(0))
+                        for n, v in zip(ncol, w):
+                            vdict[cart][part][n-1, nrow-1] = float(v)
+                m = re_block.match(line)
+                if m:
+                    inblock = True
+                    cart = m.group(1)  # 'X', 'Y' or 'Z'
+                    part = m.group(2)
+                    if (part == 'REAL'):
+                        # initialize
+                        vdict[cart] = {'REAL': np.zeros((dimen, dimen)), 'IMAG': np.zeros((dimen, dimen))}
+            if re_start.match(line):
+                started = True
+    if ascomplex:
+        # construct and return three complex arrays
+        cdict = {}
+        for cart in 'XYZ':
+            cdict[cart] = vdict[cart]['REAL'] + vdict[cart]['IMAG'] * 1j
+        if aslist:
+            # convert 2D arrays to lists of lists
+            ldict = {cart: cdict[cart].tolist() for cart in 'XYZ'}
+            return ldict
+        else:
+            return cdict
+    else:
+        if aslist:
+            # convert 2D arrays to lists of lists
+            ldict = {}
+            for cart in 'XYZ':
+                ldict[cart] = {'REAL': vdict[cart]['REAL'].tolist(), 'IMAG': vdict[cart]['IMAG'].tolist()}
+                return ldict
+        else:
+            return vdict
 ##
 class fullmatSOCI_old:
     '''
@@ -3315,6 +3393,7 @@ def read_harmonic_freqs(fname):
     Returns:
         modenums:  (list) mode numbers, except zero/low nums are negated
         irreps:  (list) labels as printed
+        wavenums: (list) frequencies in cm-1
         intenss:  (list) intensities in km/mol
         vecs:  (np.array) mode vectors; vecs[i,:] for i_th mode
     '''
@@ -3366,7 +3445,7 @@ def read_harmonic_freqs(fname):
     # convert vectors to floats and reshape: vecs[i,:] is for i_th normal mode
     vecs = [vecs[descr] for descr in cdescr]
     vecs = np.array(vecs, dtype='float').T
-    return modenums, irreps, intenss, vecs
+    return modenums, irreps, wavenums, intenss, vecs
 ##
 def readMULTI(fname, linenum=False, PG=None, parity=True, atom=False, quiet=False):
     # return a list of MULTI objects from a MOLPRO output file
