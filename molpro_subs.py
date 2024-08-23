@@ -1895,6 +1895,21 @@ class fullmatSOCI:
         # return DataFrames showing CI states and terms that contribute at least 'thr' to level 'ilevel'
         if ilevel not in self.dfso.index:
             chem.print_err('', f'ilevel = {ilevel} is not an index value in the DataFrame \'dfso\'')
+        if self.isatom:
+            # atomic calculation
+            erel = self.dfso.loc[ilevel, 'Erel']
+            if not silent:
+                print('Erel[{:d}] = {:.1f} cm-1'.format(ilevel, erel))
+            # get term weights from self.dfso
+            termwts = self.dfso.at[ilevel, 'termwt']
+            tlist = []
+            wtlis = []
+            for wt, trm in zip(termwts, self.dfterm.Term):
+                if wt > thr:
+                    tlist.append(trm)
+                    wtlis.append(wt)
+            df = pd.DataFrame({'Term': tlist, 'weight': wtlis})
+            return df
         dfci = self.dfci.copy()
         dfterm = self.dfterm.copy()
         ciwt = self.ciwt
