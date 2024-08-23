@@ -64,9 +64,9 @@ LAMBDA = ['Sigma', 'Pi', 'Delta', 'Phi', 'Gamma']
 LSYMB = ['S', 'P', 'D', 'F', 'G', 'H']
 
 SPINMULT = {0: 'Singlet', 0.5: 'Doublet', 1: 'Triplet', 1.5: 'Quartet', 
-            2: 'Quintet', 2.5: 'Sextet', 3: 'Septet', 4.5: 'Octet'}
+            2: 'Quintet', 2.5: 'Sextet', 3: 'Septet', 3.5: 'Octet'}
 MULTSPIN = {v: k for k, v in SPINMULT.items()}
-SPINLABEL = {2*k+1: v for k, v in SPINMULT.items()}
+SPINLABEL = {int(2*k+1): v for k, v in SPINMULT.items()}
 LABELSPIN = {v: k for k, v in SPINLABEL.items()}
 
 EPS0 = 8.8541878128e-12  # vacuum permittivity in F/m
@@ -7575,7 +7575,7 @@ def BS_extrap(Nlist, E, extype='n-3'):
             expon = float(extype)
         except:
             print(f'** unrecognized extrapolation method: {extype}')
-            print_err('', f'Try one of these: type_correl={ex_meth}')
+            print_err('', f'Try one of these: extype={ex_meth}')
     for i in range(len(Nlist)-1):
         if (Nlist[i+1] - Nlist[i]) != 1:
             print_err('', f'Basis-set numbers must be consecutive: {Nlist}')
@@ -7898,6 +7898,30 @@ def num_deriv(X, Y, method='central'):
     yp = dy / dx
     return xp, yp
 ##
+def term_symbol(L, sp, parity=0, linear=True, ug=False):
+    # Return term symbol
+    # 'linear' specifies linear molecule (Greek) vs. atom (Latin)
+    # 'ug' indicates whether to use '°' or 'u' for odd parity
+    # 'L' is L (for an atom) or Lz (for a linear molecule)
+    # 'sp' is either a string like 'Singlet' or a number
+    # 'parity' is 1 or -1 (other values ignored)
+    L = int(round(L))
+    try:
+        sprefix = int(round(2 * sp + 1))
+    except TypeError:
+        sp = sp.capitalize()
+        sprefix = LABELSPIN[sp]
+    if linear:
+        par = {-1: '-', 1: '+'}
+        symb = f'{sprefix}{GLAMBDA[L]}{par.get(parity,"")}'
+    else:
+        if ug:
+            par = {-1: 'u', 1: 'g'}
+        else:
+            par = {-1: '°', 1: ''}
+        symb = f'{sprefix}{LSYMB[L]}{par.get(parity,"")}'
+    return symb
+##
 def omega_possible_from_term(term):
     # for a diatomic molecule, given a term symbol, return a set of
     #   possible values for Omega: from |(Lambda - Sigma)| to (Lambda + Sigma)
@@ -7934,6 +7958,39 @@ def possible_J_from_ASD_label(lbl):
     return jvals
 ##
 def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
+                              always=False):
+    '''
+    Assign unique, enumerative labels to experimental terms
+    
+    'dfexpt' is a DataFrame ultimately from NIST ASD
+     dfexpt must have columns "Configuration", "Term", "J"
+        and an energy column labeled "Level (cm-1)"
+     Return a new DataFrame with added column 'newcol'
+     Accept both standard term symbols and symbols like "2[5/2]" and "(1/2,1/2)"
+     Assume that like terms for different configurations are different
+    '''
+    dfret = dfexpt.copy()
+    # strip the term labels of any ordinal letter-prefix
+    re_a = re.compile(r'[a-z]\s')
+    sterm = []
+    for t in dfret.Term:
+        sterm.append(re_a.sub('', t))
+    uterm = []
+    count = {}   # numerical prefix for each term label
+    tconfig = {} # list of configurations for each term label
+    for conf, trm in zip(dfret.Configuration, sterm):
+        if trm not in count:
+            count[trm] = 0
+            tconfig[trm] = []
+        if conf not in tconfig[trm]:
+            # this is a new instance of this label
+            count[trm] += 1
+            tconfig[trm].append(conf)
+        uterm.append(f'({count[trm]}){trm}')
+    dfret[newcol] = uterm
+    return dfret
+##
+def xxxunique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
                               always=False):
     '''
     Assign unique, enumerative labels to experimental terms
@@ -8097,6 +8154,9 @@ def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
         xmin: lower limit to plot (cm-1)
         xmax: upper limit
         fwhm: for Gaussian convolution (cm-1)
+        stick_color:  set to None to avoid showing the sticks
+    Return:
+        X and Y as lists of vectors after convolution
     '''
     xcol = 'Freq'
     ycol = 'IR inten'
@@ -8120,17 +8180,22 @@ def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
         axs = [axs]
     axs[-1].set_xlabel('cm$^{-1}$')
     
+    xconv = []
+    yconv = []
     for ax, df, lbl in zip(axs, dfs, labels):
         #ax.tick_params(axis='y', which='both', labelleft=False)
         ax.set_ylabel('km mol$^{-1}$')
         subdf = df[(df.Freq >= xmin) & (df.Freq <= xmax)]
         X = subdf[xcol]
         Y = subdf[ycol]
-        ax.stem(X, Y, linefmt=stick_color+'-', markerfmt=' ', basefmt=' ')
+        if stick_color is not None:
+            ax.stem(X, Y, linefmt=stick_color+'-', markerfmt=' ', basefmt=' ')
         ymax = Y.max()
         if fwhm:
             # convolve with a gaussian
             xc, yc = convolve_peakshape(X, Y, fwhm)
+            xconv.append(xc)
+            yconv.append(yc)
             ax.plot(xc, yc, color=conv_color, alpha=conv_alpha)
             ax.fill_between(xc, yc, color=conv_color, alpha=conv_alpha)
             ymax = yc.max()
@@ -8140,7 +8205,7 @@ def plot_broadened_IR(dfs, labels, xmin=None, xmax=None, fwhm=0,
         ax.text(xpos, ypos, lbl)
     plt.xlim([xmin, xmax])
     plt.show()
-    return
+    return xconv, yconv
 ##
 def plot_broadened_sticks(Xin, Yin, xlabel, ylabel, xmin=None, xmax=None, fwhm=0,
                      fcombine=100, stick_color='b', conv_color='red',
@@ -8758,4 +8823,24 @@ def read_MOL(filename):
                 ctable[j][i] = b
     geom.bonded_list(connex=ctable)
     return geom, natom, header
+##
+def arg_thresh(v, thr):
+    # Given a list/array "v" and a numerical threshold "thr",
+    # Return a list of indices for elements of v with |v| > thr
+    #    ordered by decreasing magnitude |v[i]|
+    # "v" may be complex-valued
+    
+    u = np.abs(v)  # magnitudes
+    iall = np.argsort(u)  # by increasing magnitude
+    idx = []
+    for i in reversed(iall):
+        if u[i] > thr:
+            idx.append(i)
+    return idx
+##
+def set_abs(s):
+    # Given a set of numbers, return a set of the magnitude
+    #   of those numbers
+    u = set([np.abs(x) for x in s])
+    return u
 ##
