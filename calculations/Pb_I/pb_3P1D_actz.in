@@ -1,0 +1,49 @@
+***,Pb SO-CI
+! valence terms only
+memory,1000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Pb};
+
+!basis=cc-pVTZ-DK3
+basis=aug-cc-pwCVTZ-DK3
+
+set,dkho=101
+
+! spherical anion orbitals (4S)
+{rhf; wf,charge=-1,sym=2,spin=3}
+
+if $DKHO.EQ.0 then
+    LSOP = "ECP"
+else
+    LSOP = "LS"
+endif
+
+NTRIP=3
+NSING=5
+
+! valence active space
+{multi
+    closed,20,19
+    occ,21,22
+    wf,charge=0,sym=1,spin=2;state,NTRIP;
+    wf,charge=0,sym=1,spin=0;state,NSING;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+! core is KLMN except 4f
+core,14,9
+
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=0;state,NSING; save,5101.2}
+hlsdiag(NTRIP+1) = energd4
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,$LSOP,5201.2,5101.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
