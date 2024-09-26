@@ -1,0 +1,41 @@
+***,Br SO-CI
+! active space (7/4)
+memory,3000,M;
+
+gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
+
+symmetry,xyz
+geometry={Br};
+
+file,2,acqzpp.wfu,new  !this causes failure in version 2024.1.1
+
+basis=aug-cc-pwCVQZ-PP
+
+{rhf;wf,charge=-1}
+
+NDOUB=3
+NQUAR=8
+
+{multi
+    occ,8,9
+    closed,6,3
+    wf,charge=0,sym=2,spin=1;state,NDOUB;
+    weight,all,99
+    wf,charge=0,sym=2,spin=3;state,NQUAR;
+    weight,all,1
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=2,spin=1;state,NDOUB; save,5203.2}
+hlsdiag = energd4
+{ci;wf,sym=2,spin=3;state,NQUAR; save,5303.2}
+hlsdiag(NDOUB+1) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5203.2,5303.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

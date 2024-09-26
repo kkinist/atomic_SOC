@@ -1,0 +1,44 @@
+***,Br SO-CI
+! active space (7/8)
+! much tighter thresholds, seeking correct level degeneracies
+memory,4000,M;
+
+gprint,orbitals,civector;
+gthresh,energy=1.d-10,coeff=1.d-8,gradient=1.d-7,step=1.d-4;twoint=1.d-13;
+
+!file,2,acqz.wfu,new    !this causes failure
+
+symmetry,xyz
+geometry={Br};
+
+basis=aug-cc-pwCVQZ-X2C
+
+set,dkho=101
+
+{rhf;wf,charge=-1}
+
+NSING=3
+NTRIP=8
+
+{multi
+    occ,10,12
+    closed,8,6
+    wf,charge=0,sym=2,spin=1;state,NSING;
+    wf,charge=0,sym=2,spin=3;state,NTRIP;
+    expec2,lxx,lyy,lzz
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+! KL-shell uncorrelated
+core,2,3
+
+{ci;wf,sym=2,spin=1;state,NSING; save,5203.2}
+hlsdiag = energd4
+{ci;wf,sym=2,spin=3;state,NTRIP; save,5303.2}
+hlsdiag(NSING+1) = energd4
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,ls,5203.2,5303.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

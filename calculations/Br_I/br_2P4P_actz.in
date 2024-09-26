@@ -1,0 +1,37 @@
+***,Br SO-CI
+! active space (7/8)
+memory,2000,M;
+
+gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
+
+symmetry,xyz
+geometry={Br};
+
+basis=aug-cc-pwCVTZ-X2C
+
+set,dkho=101
+
+{rhf;wf,charge=-1}
+
+{multi
+    occ,10,12
+    closed,8,6
+    wf,charge=0,sym=2,spin=1;state,3;
+    wf,charge=0,sym=2,spin=3;state,3;
+    expec2,lxx,lyy,lzz
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+! KL-shell uncorrelated
+core,2,3
+
+{ci;wf,sym=2,spin=1;state,3; save,5203.2}
+hlsdiag = energd4
+{ci;wf,sym=2,spin=3;state,3; save,5303.2}
+hlsdiag(4) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5203.2,5303.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
