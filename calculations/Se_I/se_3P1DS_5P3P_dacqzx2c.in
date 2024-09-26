@@ -1,0 +1,46 @@
+***,Se SO-CI
+memory,1500,M;
+
+gprint,orbitals,civector,basis;
+
+symmetry,xyz
+geometry={Se};
+
+!basis=AWCVQZ-X2C
+basis={
+spdfgh,se,AWCVQZ-X2C;C; spdf,1,even,nprim=1,ratio=3.0;
+}
+
+set,dkho=101
+
+NT=6
+NS=6
+NQ=3
+PAR=1  ! parity even (1) or odd (2)
+
+{rhf;wf,charge=1,sym=2,spin=3}
+
+{multi
+    closed,8,6
+    occ,9,12
+    wf,charge=0,sym=PAR,spin=2;state,NT;
+    wf,charge=0,sym=PAR,spin=0;state,NS;
+    wf,charge=0,sym=PAR,spin=4;state,NQ;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,2,3
+
+{ci;wf,sym=PAR,spin=2;state,NT; save,5302.2}
+hlsdiag = energd4
+{ci;wf,sym=PAR,spin=0;state,NS; save,5102.2}
+hlsdiag(NT+1) = energd4
+{ci;wf,sym=PAR,spin=4;state,NQ; save,5502.2}
+hlsdiag(NT+NS+1) = energd4
+
+table,hlsdiag
+
+lsint
+{ci;hlsmat,ls,5302.2,5102.2,5502.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
