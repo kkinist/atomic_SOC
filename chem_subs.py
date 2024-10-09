@@ -60,8 +60,8 @@ PHI = '\N{GREEK CAPITAL LETTER PHI}'
 GAMMA = '\N{GREEK CAPITAL LETTER GAMMA}'
 ETA = 'H'  # easier for typists
 GLAMBDA = [SIGMA, PPI, DELTA, PHI, GAMMA, ETA]
-LAMBDA = ['Sigma', 'Pi', 'Delta', 'Phi', 'Gamma']
-LSYMB = ['S', 'P', 'D', 'F', 'G', 'H']
+LAMBDA = ['Sigma', 'Pi', 'Delta', 'Phi', 'Gamma', 'Eta'] # linear molecule
+LSYMB = ['S', 'P', 'D', 'F', 'G', 'H', 'I', 'K', 'L', 'M']  # atomic
 
 SPINMULT = {0: 'Singlet', 0.5: 'Doublet', 1: 'Triplet', 1.5: 'Quartet', 
             2: 'Quintet', 2.5: 'Sextet', 3: 'Septet', 3.5: 'Octet'}
@@ -8843,4 +8843,18 @@ def set_abs(s):
     #   of those numbers
     u = set([np.abs(x) for x in s])
     return u
+##
+def sort_dict_by_value(d, reverse=False, lists=False):
+    # Return a copy of dict "d", orderd by increasing value
+    #    decreasing order if reverse==True
+    # If "lists", also return keys and values as lists
+    #    in the sorted order
+    ksort = sorted(d, key=d.get, reverse=reverse)  # keys
+    retval = {k: d[k] for k in ksort}
+    if lists:
+        klist = list(retval)
+        vlist = list(retval.values())
+        return retval, klist, vlist
+    else:
+        return retval
 ##

@@ -1991,7 +1991,7 @@ class fullmatSOCI:
         df.fillna(0, inplace=True)
         df['all'] = df.sum(axis=1)
         return df
-    def assign_atomic_J(self, csq_thresh=0.01, quiet=False):
+    def assign_atomic_J(self, csq_thresh=0.01, quiet=False, Escale=1000):
         '''
         Assume the CASSCF degeneracies are good
         Assume the MRCI degeneracies are damaged
@@ -2000,6 +2000,7 @@ class fullmatSOCI:
         Return a DataFrame of SO levels
         This version uses Kmeans clustering based upon energy and
           term composition
+        'Escale' is number of cm-1 "equivalent" to 100% in term composition
         '''
         self.average_terms(quiet=quiet, atom=True)
         self.compute_term_weights()  # assign self.termwt based on self.vecsq
@@ -2044,12 +2045,12 @@ class fullmatSOCI:
         if nstate != len(dfsoci):
             chem.print_err('', 'Expect {:d} SO-CI states but this is room for {:d}'.format(nstate, len(dfsoci)))
         # Create the array to send to the SciKit clustering routine
-        # Clusters are based upon energy (mapped onto the interval [0, 1]) and
-        #   upon term weights
+        # Clusters are based upon energy/Escale and upon term weights
         Xwt = np.transpose(self.termwt).copy() # term weights within each microstate
-        # add another column for relative energy re-scaled to [0, 1] to match the term weights
+        # add another column for relative energy/Escale
         levE = dfsoci.Erel.values
-        xe = levE / levE.max()
+        #xe = levE / levE.max()
+        xe = levE / Escale
         #xe = dfsoci.Erel.values / dfsoci.Erel.max()
         xe = xe.reshape((-1,1))
         X = np.hstack((Xwt, xe))
