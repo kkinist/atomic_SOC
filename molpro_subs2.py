@@ -421,7 +421,7 @@ def unnormalize_cas_weights(weights):
 def multi_iterations(linebuf):
     # Given relevant lines, as from multi_sections()['iterations'][0],
     # return a dataframe of the convergence progress
-    re_iter = re.compile(r' ITER. MIC  NCI  NEG     ENERGY\(VAR\)     ENERGY\(PROJ\)')
+    re_iter = re.compile(r' ITER.\s+MIC\s+NCI\s+NEG\s+ENERGY\(VAR\)\s+ENERGY\(PROJ\)')
     re_eiter = re.compile(r'(\s+\d+){4}(\s+[-]?\d+\.\d+)+')
   
     d = {}  # key = column heading, value = list
@@ -538,7 +538,9 @@ def multi_expec(linebuf):
                 expecd[op] = {'Label': [], 'value': []}
             lbl = m.group(1)
             expecd[op]['Label'].append(lbl)
-            x = float(line.replace('D', 'E').split()[-1])
+            # discard all to the left of the ket bracket ">"
+            line = '>'.join(line.split('>')[1:])
+            x = float(line.replace('D', 'E').split()[0])
             expecd[op]['value'].append(x)
     # get labels from last operator
     labels = expecd[op]['Label']
@@ -932,11 +934,15 @@ def hf_occup(filebuf):
     # Given relevant lines, as from identify_sections()['rhf'][0], 
     # Return the final orbital occupations, by irrep
     re_occ = re.compile(r' Final (alpha|beta ) occupancy: ')
+    re_clo = re.compile(r' Final occupancy: ')
     retval = {}
     for line in filebuf:
         m = re_occ.match(line)
         if m:
             retval[m.group(1)] = [int(x) for x in line.split()[3:]]
+        m = re_clo.match(line)
+        if m:
+            retval['alpha/beta'] = [int(x) for x in line.split()[2:]]
     return retval
 ##
 def soci_sections(inbuf):
@@ -1163,7 +1169,51 @@ def soci_vectors(linebuf):
     #  key = 'matrix', for vectors: first index is basis, second is eigenstate
     # 'linebuf' is a list of lines of text as from soci_section()['so_vectors'][0]
     
-    retval = soci_matrix(linebuf)  # format is the same! 
+    try:
+        retval = soci_matrix(linebuf)  # format is the same! 
+    except:
+        # Maybe format is not the same (even-electron system)
+        re_hdr = re.compile(r' Nr Sym  State Sym Spin / Nr\.')
+        # line with real component has six leading fields
+        re_re = re.compile(r'(\s+\d+){4}\s+\|\d+ \d+>[-+]?')
+        # line with imaginary components is only floats
+        re_im = re.compile(r'(\s+[-]?\d+\.\d+)+')
+        # first find the dimension of the matrix
+        dimen = 0
+        for line in linebuf:
+            if re_hdr.match(line):
+                dimen = int(line.split()[-1])
+        
+        basis = [{} for i in range(dimen)]
+        somat = np.zeros((dimen, dimen), dtype=complex)
+        retval = {'basis': basis, 'matrix': somat}
+        for line in linebuf:
+            if re_hdr.match(line):
+                cols = [int(x) for x in line.split()[7:]]
+            if re_re.match(line):
+                w = line.split()
+                nr = int(w.pop(0))               
+                sym1 = int(w.pop(0))  # there are two columns 'Sym' 
+                st = w.pop(0)
+                sym2 = w.pop(0)
+                S = float(w.pop(0).replace('|', ''))
+                spinstr = w.pop(0)  # looks something like "1>+"
+                t = spinstr.split('>')
+                sz = float(t[0])
+                if '-' in spinstr:
+                    sz = -sz
+                ibas = nr - 1
+                # assemble standard state label from 'st' and 'sym2'
+                st += '.' + sym2
+                basis[ibas] = {'Nr': nr, 'Sym': sym1, 'State': st, 'S': S, 'Sz': sz}
+                for n, x in zip(cols, w):
+                    icol = n - 1
+                    somat[ibas, icol] += float(x)
+            if re_im.match(line):
+                w = line.split()
+                for n, x in zip(cols, w):
+                    icol = n - 1
+                    somat[ibas, icol] += float(x) * 1j
     return retval
 ##
 def soci_composition(linebuf):
@@ -1178,6 +1228,47 @@ def soci_composition(linebuf):
     retval = soci_matrix(buf)  # format is the same! 
     # except that composition is real-valued
     retval['matrix'] = np.real(retval['matrix'])
+    if retval['matrix'].sum() == 0:
+        # Parsing failed; consider alternative even-electron format
+        retval = soci_composition_even(buf)
+    return retval
+##
+def soci_composition_even(linebuf):
+    # Read the composition of the SO-CI eigenvectors (by basis state, IN PERCENT)
+    #   For even-electron Molpro format (containing ket notation)
+    # Return a dict
+    #  key = 'basis', for list of basis states
+    #  key = 'matrix', for vectors: first index is basis, second is eigenstate
+    # 'linebuf' is a list of lines of text from soci_composition()
+    
+    # Find the dimension of the matrix
+    dimen = 0
+    re_hdr = re.compile(r' Nr Sym  State Sym Spin / Nr\.(\s+\d+)+')
+    for line in linebuf:
+        w = line.split()
+        if re_hdr.match(line):
+            dimen = max(dimen, int(w[-1]))
+    basis = [{} for i in range(dimen)]
+    compos = np.zeros((dimen, dimen))
+    retval = {'basis': basis, 'matrix': compos}
+    
+    re_dat = re.compile(r'(\s+\d+){4}\s+\|\d+ \d+>[-+]?(\s+\d+\.\d+)+')
+    for line in linebuf:
+        w = line.split()
+        if re_hdr.match(line):
+            icols = [int(n)-1 for n in w[7:]]
+        if re_dat.match(line):
+            nr = int(w[0])
+            irrep = int(w[1])
+            st = '.'.join(w[2:4])
+            S = int(w[4].replace('|', ''))
+            sz = int(w[5].split('>')[0])
+            if '-' in w[5]:
+                sz = -sz
+            ibas = nr - 1
+            basis[ibas] = {'Nr': nr, 'Sym': irrep, 'State': st, 'S': S, 'Sz': sz}
+            for iso, pct in zip(icols, w[6:]):
+                compos[ibas, iso] = float(pct)
     return retval
 ##
 def soci_energies(linebuf):
@@ -1968,10 +2059,9 @@ def collect_atomic_J_sets(df_soE, renumber=True):
     data['idx'] = idxl
     # round values in columns Erel, Erel_spread, TC_spread
     data['Erel'] = [np.round(x, 2) for x in data['Erel']]
-    # Do not round term compositions because they are important for eq. (2) SOC
-    data['term_comp'] = data['term_comp']
     data['Erel_spread'] = [np.round(x, 2) for x in Erel_spr]
     data['TC_spread'] = [np.round(cspr) for cspr in TC_spr]
+    # Do not round term compositions because they are important for eq. (2) SOC
     if 'Eshift' in data.keys():
         data['Eshift'] = [np.round(x, 2) for x in data['Eshift']]
     dflev = pd.DataFrame(data)
@@ -1979,4 +2069,25 @@ def collect_atomic_J_sets(df_soE, renumber=True):
     if renumber:
         dflev = dflev.reset_index(drop=True)
     return dflev
+##
+def color_by_orb(dforb, c1='white', c2='lightgrey'):
+    # Given a DataFrame of orbitals ('Orbital')
+    #   display it with shading alternating with each
+    #   orbital, instead of with each line of the DF
+    palette = [c1, c2]
+    color = []
+    prev = ''
+    i = 0
+    for orb in dforb.Orbital:
+        if orb != prev:
+            # change
+            i += 1
+        color.append(palette[i%2])
+        prev = orb
+    styler = dforb.style
+    styler = styler.apply(lambda x: [f'background-color: {color[i]}' for i in x.index],
+                         axis=0)
+    styler = styler.hide()  # suppress the index, which is differently shaded
+    chem.displayDF(styler)
+    return 
 ##
