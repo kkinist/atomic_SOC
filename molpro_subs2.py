@@ -588,7 +588,7 @@ def parse_orbitals(linebuf):
     re_data = re.compile(r'\s+(\d+\.\d)\s+([-]?\d\.\d+)\s*([-]?\d+\.\d+)\s+\d+\s+\d+\s+[a-z]')
     orbl = []; occl = []; El = []; cenl = []; mul = []; typl = []; coeffl = []
     for line in linebuf:
-        if 'ORBITAL' in line:
+        if ('ORBITAL' in line) and ('**' not in line):
             title = line.strip()
         if re_data.match(line):
             w = line.split()
@@ -882,6 +882,36 @@ def mrci_results(linebuf):
     retval['state'] = state
     retval['transmom'] = trans
     return retval
+##
+def coefficients_of_refs(linebuf, kind='fixed'):
+    # Given relevant lines, as from mrci_sections()['results'][0],
+    # return a matrix of coefficients, indices = (state, ref)
+    # 'kind' can be 'fixed' or 'rotated'
+    re_fixref = re.compile(f' Coefficients of {kind} reference functions:')
+    re_1st = re.compile('\s*\d+(\s+[-]?\d+\.\d+)+')
+    re_cont = re.compile('(\s+[-]?\d+\.\d+)+')
+    re_blank = re.compile('^\s*$')
+    rows = []  # list of matrix rows, as text
+    inblock = row = False
+    for line in linebuf:
+        if inblock:
+            if re_blank.match(line) and (len(rows) > 0):
+                break
+            if re_1st.match(line):
+                w = line.split()
+                n = int(w.pop(0))  # consecutive state number
+                if n > 1:
+                    # save previous row
+                    rows.append(row)
+                row = w
+            if re_cont.match(line):
+                row = row + line.split()
+        if re_fixref.match(line):
+            inblock = True
+    # save the last row
+    rows.append(row)
+    mat = np.array(rows).astype(float)
+    return mat
 ##
 def SO_integrals(linebuf):
     # Given relevant lines, as from major_sections()['SOintegrals'][0],
