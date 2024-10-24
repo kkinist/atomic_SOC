@@ -1709,7 +1709,7 @@ def singletons_J(df_soE, J_left, thr_degen=5, thr_tcomp=3, verbose=False):
                     print(f'Energy spread = {spr:.1f} cm-1')
                     if spr > thr_degen:
                         print(f'    Note: this is larger than thr_degen = {thr_degen} cm-1')
-                    print(f'Term composition spread = {cspr} %')
+                    print(f'Term composition spread = {np.round(cspr,1)} %')
                     print(f'    max term comp spread = {maxcspr:.1f} %')
                     if maxcspr > thr_tcomp:
                         print(f'    Note: this is larger than thr_tcomp = {thr_tcomp} %')
@@ -1731,7 +1731,7 @@ def poss_count_just_right(df_soE, J_left, thr_degen=5, thr_tcomp=3,
       thr_tcomp :  expected slop in term compos (%)
     '''
     if verbose:
-        print('--- Look for values of J where #possibilities = #missing ---')
+        print('--- Look for values of J where (#possibilities) = (#missing) ---')
     showcols = ['Erel', 'J_poss', 'term_comp']
     subdf = df_soE[df_soE.J.isnull()]  # unassigned levels
     n_assigned = 0
@@ -1781,8 +1781,12 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
     '''
     showcols = ['Erel', 'J_poss', 'term_comp']
     tot_assigned = 0
+    groups = []  # list of lists of indices of levels that belong together
+    edifl  = []  # list of smallest energy diff from adjacent
+    cdifl  = []  # list of smallest composition diff from adjacent
     for Jsep in sorted(J_left.keys()):
-        if J_left[Jsep] < 1:
+        nneed = J_left[Jsep]
+        if nneed < 1:
             # this J is fully assigned; no levels to consider
             continue
         if verbose:
@@ -1801,6 +1805,14 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
             df = seldf.iloc[ilo:ihi]
             # consider energies
             spr, cspr, maxcspr = spreads_ETC(df)
+            if spr is None:
+                # 'df' is empty
+                print('*** unexpected condition ***')
+                print(f'>>>ilo = {ilo}, ihi = {ihi}, degen = {degen}, nrows = {nrows}' +
+                      f' Jsep = {Jsep}')
+                print('subdf:')
+                chem.displayDF(subdf)
+                print('J_left:', J_left)
             if spr > thr_degen:
                 # not clearly degenerate
                 continue
@@ -1809,10 +1821,13 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
                 # not clearly the same term composition
                 continue
             # Get here when the levels appear to be degenerate
-            # Are they well-separated from the previous level? 
+            # Are they well-separated from the previous and subsequent levels? 
             #   by either criterion, energy or term composition
             too_similar = True
+            # mininum differences in E, compos compared with previous/subsequent levels
+            edif = cdif = np.inf  # mininum differences
             if ilo > 0:
+                # compare with previous level
                 sp, a, b = spreads_ETC(seldf.iloc[ilo-1:ihi])
                 if sp > thr_big:
                     too_similar = False
@@ -1820,9 +1835,11 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
                     too_similar = False
                 if too_similar:
                     continue
-            # Well-separated from following level?
+                edif = min(edif, sp)
+                cdif = min(cdif, b)
             too_similar = True
             if ihi < nrows - 1:
+                # compare with subsequent level
                 sp, a, b = spreads_ETC(seldf.iloc[ilo:ihi+1])
                 if sp > thr_big:
                     too_similar = False
@@ -1830,8 +1847,35 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
                     too_similar = False
                 if too_similar:
                     continue
+                edif = min(edif, sp)
+                cdif = min(cdif, b)
             # We reach this point only is the set of levels is clearly degenerate and
             #    well-separated from adjacent levels
+            # Add them to the list of proposed assignments
+            idx = df.index
+            groups.append(idx)
+            edifl.append(edif)
+            cdifl.append(cdif)
+        # Check number of proposed assignments
+        nprop = len(idx)
+        nlev = nprop * degen
+        if nlev > nneed:
+            if verbose:
+                print(f'    {nlev} assignments proposed but only {nneed} needed')
+            # Select only the best
+            while len(idx) > nneed // degen:
+                # discard the worst
+                isort = np.argsort(edif)
+                jsort = np.argsort(cdif)
+                imin = isort[0]  # smallest energy gap
+                jmin = jsort[0]  # smallest composition gap
+                if imin == jmin: 
+                    # easy case
+                    del idx[imin]; del edifl[imin]; del cdifl[imin]
+                else:
+                    # indices not the same
+                    print('>>>indices not the same')
+                    pass  # NYI
             # Assign them
             idx = df.index
             if verbose:
@@ -1839,8 +1883,17 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
             n_assigned = record_J_assignment(df_soE, J_left, idx, Jsep)
             idx_ass.extend(list(idx))
         if n_assigned and verbose:
-            chem.displayDF(seldf[showcols].style.applymap(lambda _: "background-color: lightgreen", subset=(idx_ass,)))
+            #chem.displayDF(seldf[showcols].style.applymap(lambda _: "background-color: lightgreen", subset=(idx_ass,)))
+            chem.displayDF(seldf[showcols].style.map(lambda _: "background-color: lightgreen", subset=(idx_ass,)))
         tot_assigned += n_assigned
+        print(f'>>>>nneed = {nneed}, n_assigned = {n_assigned}')
+        print('J_left:', J_left)
+        if J_left[Jsep] < 1:
+            # This J is eliminated from consideration for other levels;
+            #    return to more robust assignment methods
+            if verbose:
+                print(f'    All needed levels assigned for J = {Jsep}')
+            break
     return tot_assigned
 ##
 def elim_implausible_J(df_soE, J_left, thr_big=500, thr_tcbig=15, verbose=False):
@@ -1984,7 +2037,7 @@ def assign_J_laboriously(df_soE, J_left, thr_degen=5, thr_big=500,
     '''
     Assign J for clearly degenerate levels that are well-separated from
       adjacent levels, considering both energy and term composition
-    Return number of levels assigned
+    Return number of levels unassigned
     For atomic calculations
     Loop over all tricks 
     Args: 
@@ -1995,6 +2048,13 @@ def assign_J_laboriously(df_soE, J_left, thr_degen=5, thr_big=500,
       thr_big   :  energy margin for being well-separated (cm-1)
       thr_tcbig :  term-composition margin for well-sep (%)
     '''
+    # First, check for problem with insufficient possibilities
+    for J in J_left.keys():
+        dfJ = Jposs_subdf(df_soE, J)
+        nposs = len(dfJ)
+        if nposs < J_left[J]:
+            chem.print_err('', f'{J_left[J]} levels are needed for' +
+                           f' J = {J} but only {nposs} are possible')
     iround = 0
     X = 1.  # factor by which to increase thresholds
     Xlim = 3. # max value for X
@@ -2005,24 +2065,30 @@ def assign_J_laboriously(df_soE, J_left, thr_degen=5, thr_big=500,
             print(f'* Threshold inflation factor = {X} *')
         if verbose:
             print(f'*** Singletons, round {iround}')
+        # a rigorous assignment method
         n_assigned += singletons_J(df_soE, J_left, thr_degen*X, thr_tcomp*X, verbose=verbose)
         if not number_unassigned_J(J_left):
             # success:  all levels assigned
             break
         if verbose:
             print(f'*** Equal needed and possible, round {iround}')
+        # a rigorous assignment method
         n_assigned += poss_count_just_right(df_soE, J_left, thr_degen*X, thr_tcomp*X,
                                                verbose=verbose)
         if not number_unassigned_J(J_left):
             break
         if verbose:
             print(f'*** Clearly separated, round {iround}')
+        # method vulnerable to accidental degneracies; vulnerability is 
+        #    mitigated by use of composition 
         n_assigned += clear_degen_sep(df_soE, J_left, thr_degen*X, thr_tcomp*X,
                                          thr_big, thr_tcbig, verbose=verbose)
         if not number_unassigned_J(J_left):
             break
         if verbose:
             print('*** Prune implausible "possible" values of J')
+        # method vulnerable to accidental degneracies; vulnerability is 
+        #    mitigated by use of composition 
         elim_implausible_J(df_soE, J_left, thr_big, thr_tcbig, verbose=verbose)
         X = min(X + 1, Xlim)
         if (iround > Xlim + 1) and (n_assigned == 0):
