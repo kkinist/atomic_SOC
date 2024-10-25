@@ -121,7 +121,7 @@ def identify_sections(fpro):
     re_rhf = re.compile('Program \* Restricted Hartree-Fock')
     re_multi = re.compile('PROGRAM \* MULTI')
     re_mrci = re.compile('PROGRAM \* CI')
-    re_soint = re.compile('PROGRAM \* SEWLS')
+    #re_soint = re.compile('PROGRAM \* SEWLS')
     re_soci = re.compile('\* Spin-orbit calculation \*')
     
     with open(fpro, 'r') as F:
@@ -145,9 +145,9 @@ def identify_sections(fpro):
                 # this hits spin-orbit CI, but won't store it as 'mrci'
                 store_section()
                 sec_name = 'mrci'
-            if re_soint.search(line):
-                store_section()
-                sec_name = 'SOintegrals'
+            #if re_soint.search(line):
+            #    store_section()
+            #    sec_name = 'SOintegrals'
             if re_soci.search(line):
                 sec_name = 'soci'
             linebuf.append(line)
@@ -624,7 +624,7 @@ def parse_multi_1civec(linebuf):
     energies = []
     colnos = []   # column numbers as printed (1-based)
     label = ''
-    nirr = ncols = nstate = 0
+    nirr = ncols = 0
     in_etot = False
     for line in linebuf:
         if re_hdr.match(line):
