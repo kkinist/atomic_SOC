@@ -1,0 +1,35 @@
+***,Kr SO-CI
+! active space (8/7)
+memory,4000,M;
+
+gprint,orbitals,civector,basis
+
+symmetry,xyz
+geometry={Kr};
+
+basis={
+ecp,kr,ECP10MDF;
+spdfgh,kr,aug-cc-pwCVQZ-PP;C; spdf,1,even,nprim=1,ratio=3.0;
+}
+
+rhf
+
+{multi,wmk
+    occ,7,9
+    wf,sym=1,spin=0;state,10; weight,99,1,1,1,1,1,1,1,1,1
+    wf,sym=1,spin=2;state,9; 
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=1,spin=0;state,10; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,9; save,5202.2}
+hlsdiag(11) = energd
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5201.2,5202.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

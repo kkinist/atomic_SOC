@@ -1,0 +1,37 @@
+***,Kr SO-CI
+! active space (8/7)
+! extra diffuse spdf
+memory,4000,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Kr};
+
+basis={spdfg,kr,AWCVTZ-X2C;C; spdf,1,even,nprim=1,ratio=3.0}
+
+set,dkho=101
+
+! cation orbitals
+{rhf;wf,nelec=35,sym=1,spin=1}
+
+{multi,wmk
+    occ,9,12
+    wf,nelec=36,sym=1,spin=0;state,10; weight,99,1,1,1,1,1,1,1,1,1
+    wf,nelec=36,sym=1,spin=2;state,9; 
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,2,3
+
+{ci;wf,sym=1,spin=0;state,10; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,9; save,5202.2}
+hlsdiag(11) = energd
+
+table,hlsdiag
+
+lsint  ! fails without this line
+{ci;hlsmat,ls,5201.2,5202.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
