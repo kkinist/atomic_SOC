@@ -7,7 +7,6 @@ import re, sys
 import pandas as pd
 import numpy as np
 from collections import Counter
-from sklearn.cluster import KMeans
 import chem_subs as chem
 ##
 SPINMULT = {0: 'Singlet', 1: 'Triplet', 0.5: 'Doublet', 1.5: 'Quartet', 2: 'Quintet',
@@ -180,9 +179,9 @@ def multi_sections(inbuf):
                        r'\s+(\S+) \(energy\)')
                        #r'\s+(\S+) \(energy\)\s+(\S+) \(step length\)')
     re_results = re.compile(r' Results for state\s*\d+\.\d')
-    re_trans = re.compile(r' !MCSCF trans\s+<|[eE]xpectation values')
+    re_trans = re.compile(r' !MCSCF trans\s+<|[eE]xpectation values| !MCSCF expec\s+<')
     re_natorb = re.compile('\s+NATURAL ORBITALS')
-    re_civec = re.compile(r' CI (vector|Coefficients) (of|for state) symmetry\s*\d+')
+    re_civec = re.compile(r' CI (vector|Coefficients) (of|for state) symmetry\s*\d+| CI vector\n')
     re_stars = re.compile(r'[*]{40}')
 
     for line in inbuf:
@@ -768,7 +767,9 @@ def mrci_iterations(linebuf):
     retval = {}
     in_eref = in_iter = False
     iterdat = []  # list of rows
-    for line in linebuf:
+    for rawline in linebuf:
+        line = uncrowd_DExp(rawline)  # in case a space was lost to large time
+        line = uncrowd_energies(line) # in case spaces were lost to large energies
         if in_iter:
             if re_blank.match(line):
                 in_iter = False
@@ -812,7 +813,7 @@ def mrci_results(linebuf):
                    'correl E': re.compile(r' Correlation energy\s+([-]?\d+\.\d+)'),
                    'virial': re.compile(r' Virial quotient\s+([-]?\d+\.\d+)'),
                   }
-    re_total = re.compile(r' !MRCI STATE\s*(\d+\.\d) (Energy|Dipole)')
+    re_total = re.compile(r' !(?:MRCI|CI\(SD\)) STATE\s*(\d+\.\d) (Energy|Dipole)')
     re_corrected = re.compile(r' Cluster corrected energies\s+([-]?\d+\.\d+) ' +
         r'\((Davidson|Pople), (fixed|relaxed|rotated) reference\)')
     re_trans = re.compile(r' !MRCI trans\s+<(\d+\.\d)\|([A-Z\d]+)\|(\d+\.\d)>' +
@@ -1054,10 +1055,12 @@ def soci_replacements(linebuf):
             block = ''  # will be either 'old' or 'new'
         if 'Original energies' in line:
             block = 'old'
-            retval[recno][block] = [float(x) for x in line.split()[2:]]
+            sline = line.replace('-', ' -')  # energies may run together
+            retval[recno][block] = [float(x) for x in sline.split()[2:]]
         if 'Replaced energies' in line:
             block = 'new'
-            retval[recno][block] = [float(x) for x in line.split()[2:]]
+            sline = line.replace('-', ' -')  # energies may run together
+            retval[recno][block] = [float(x) for x in sline.split()[2:]]
         if re_floats.match(line):
             retval[recno][block].extend([float(x) for x in line.split()])
     return retval
@@ -1315,7 +1318,8 @@ def soci_energies(linebuf):
     erel = []
     retval = {'E': eabs, 'Eshift': eshift, 'Erel': erel}
     iabs = irel = ishift = 9999
-    for line in linebuf:
+    for rawline in linebuf:
+        line = uncrowd_energies(rawline) # in case a space is lost to large energy
         if 'Nr' in line:
             # first header line
             w1 = line.split()[1:]
@@ -1542,7 +1546,7 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
     df = pd.DataFrame(data)
     return df
 ##
-def collect_atomic_terms(dfcas, Ecol='E'):
+def collect_atomic_terms(dfcas, Ecol):
     # Given a DataFrame of CASSCF (or similar) states,
     # return a DF with states collected into terms
     colsmissing = []
@@ -1580,11 +1584,17 @@ def collect_atomic_terms(dfcas, Ecol='E'):
                 irrl.append(subdf.iloc[0]['irrep'])
                 Sl.append(S)
                 Ll.append(L)
-                spread.append(subdf[Ecol].values.ptp())
+                s = subdf[Ecol].values.ptp()
+                spread.append(s)
     if orphans:
         return None
-    spread = np.array(spread) * chem.AU2CM  # convert spreads to cm-1
-    dfcasterm = pd.DataFrame({'term': tsym, Ecol: El, 'erange_cm': spread,
+    scolname = f'{Ecol}_range'
+    if Ecol in ['E', 'Edav']:
+        # Assume Hartrees and convert to cm-1
+        spread = np.array(spread) * chem.AU2CM  # convert spreads to cm-1
+        spread = np.round(spread, 1)  # round to nearest 0.1 cm-1
+        scolname += '_cm'
+    dfcasterm = pd.DataFrame({'term': tsym, Ecol: El, scolname: spread,
                               'irrep': irrl, 'L': Ll, 
                               'S': Sl, 'idx': idxl, 'Labels': lbll})
     erel = np.round(chem.AU2CM*(dfcasterm[Ecol] - dfcasterm[Ecol].min()), 1)
@@ -1642,13 +1652,17 @@ def record_J_assignment(df_soE, J_left, idx, J):
       df_soE : DataFrame of results from soci_energies()
       J_left : dict with key = J-value and value = count still to be assigned
       idx    : list of indices into df_soE
-      J      : value of J to assigne to those levels
+      J      : value of J to assign to those levels
     '''
     nlev = len(idx)
     degen = int(2*J + 1)
     if (nlev % degen) != 0:
         chem.print_err('', f'{nlev} levels is not a multiple of degeneracy for J = {J}')
     df_soE.loc[idx, 'J'] = J
+    if 'ilev' in df_soE.columns:
+        # number each degenerate set of (sub)levels
+        ilev = df_soE.ilev.max()  # highest previously numbered level
+        df_soE.loc[idx, 'ilev'] = ilev + 1 + np.array(range(len(idx))) // degen
     # decrement outstanding assignments
     J_left[J] -= degen
     if J_left[J] < 1:
@@ -1675,8 +1689,8 @@ def singletons_J(df_soE, J_left, thr_degen=5, thr_tcomp=3, verbose=False):
       thr_tcomp :  expected slop in term compos (%)
     '''
     if verbose:
-        print('--- Look for levels with only one possible value of J ---')
-    showcols = ['Erel', 'J_poss', 'term_comp']
+        print('\n--- Look for levels with only one possible value of J ---')
+    showcols = ['Erel', 'J_poss', 'TC_approx']
     dfunk = df_soE[df_soE.J.isnull()]  # unassigned levels only
     df_singl = dfunk[dfunk.nposs == 1]
     nsingl = len(df_singl)
@@ -1731,15 +1745,16 @@ def poss_count_just_right(df_soE, J_left, thr_degen=5, thr_tcomp=3,
       thr_tcomp :  expected slop in term compos (%)
     '''
     if verbose:
-        print('--- Look for values of J where (#possibilities) = (#missing) ---')
-    showcols = ['Erel', 'J_poss', 'term_comp']
+        print('\n--- Look for values of J where (#possibilities) = (#needed) ---')
+    showcols = ['Erel', 'J_poss', 'TC_approx']
     subdf = df_soE[df_soE.J.isnull()]  # unassigned levels
     n_assigned = 0
-    for J, nleft in J_left.items():
+    for J in sorted(J_left.keys()):
+        nleft = J_left[J]
         dfJ = Jposs_subdf(subdf, J)
         nposs = len(dfJ)
         if verbose:
-            print(f'For J = {J}, {nleft:2d} levels are needed and {nposs:2d} are possible')
+            print(f'    For J = {J}, {nleft:2d} levels are needed and {nposs:2d} are possible')
         if nleft and (nleft == nposs):
             if verbose:
                 print('   assigning them all')
@@ -1779,12 +1794,13 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
       thr_big   :  energy margin for being well-separated (cm-1)
       thr_tcbig :  term-composition margin for well-sep (%)
     '''
-    showcols = ['Erel', 'J_poss', 'term_comp']
+    showcols = ['Erel', 'J_poss', 'TC_approx']
     tot_assigned = 0
     groups = []  # list of lists of indices of levels that belong together
     edifl  = []  # list of smallest energy diff from adjacent
     cdifl  = []  # list of smallest composition diff from adjacent
-    for Jsep in sorted(J_left.keys()):
+    print()
+    for Jsep in sorted(J_left.keys(), reverse=True):
         nneed = J_left[Jsep]
         if nneed < 1:
             # this J is fully assigned; no levels to consider
@@ -1794,15 +1810,13 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
         subdf = df_soE[df_soE.J.isnull()]  # unassigned levels
         n_assigned = 0
         seldf = Jposs_subdf(subdf, Jsep)
-        #idxJ = list(seldf.index)
         nrows = len(seldf)
-        ilo = ihi = -1
         degen = int(2*Jsep + 1)
         idx_ass = []
-        while ihi < nrows:
-            ilo += 1
-            ihi = ilo + degen
-            df = seldf.iloc[ilo:ihi]
+        idx = []
+        for ilo in range(nrows - degen):
+            ihi = ilo + degen  # one beyond the end of the range
+            df = seldf.iloc[ilo:ihi]  # excludes 'ihi'
             # consider energies
             spr, cspr, maxcspr = spreads_ETC(df)
             if spr is None:
@@ -1810,8 +1824,10 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
                 print('*** unexpected condition ***')
                 print(f'>>>ilo = {ilo}, ihi = {ihi}, degen = {degen}, nrows = {nrows}' +
                       f' Jsep = {Jsep}')
-                print('subdf:')
-                chem.displayDF(subdf)
+                print('df:')
+                chem.displayDF(df)
+                print('seldf:')
+                chem.displayDF(seldf)
                 print('J_left:', J_left)
             if spr > thr_degen:
                 # not clearly degenerate
@@ -1857,8 +1873,7 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
             edifl.append(edif)
             cdifl.append(cdif)
         # Check number of proposed assignments
-        nprop = len(idx)
-        nlev = nprop * degen
+        nlev = len(idx)
         if nlev > nneed:
             if verbose:
                 print(f'    {nlev} assignments proposed but only {nneed} needed')
@@ -1886,8 +1901,6 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
             #chem.displayDF(seldf[showcols].style.applymap(lambda _: "background-color: lightgreen", subset=(idx_ass,)))
             chem.displayDF(seldf[showcols].style.map(lambda _: "background-color: lightgreen", subset=(idx_ass,)))
         tot_assigned += n_assigned
-        print(f'>>>>nneed = {nneed}, n_assigned = {n_assigned}')
-        print('J_left:', J_left)
         if J_left[Jsep] < 1:
             # This J is eliminated from consideration for other levels;
             #    return to more robust assignment methods
@@ -1896,10 +1909,53 @@ def clear_degen_sep(df_soE, J_left, thr_degen=5, thr_tcomp=3,
             break
     return tot_assigned
 ##
+'''
+def max_J_best_group(df_soE, J_left, Escale=10., thr=0.5, verbose=False):
+    # For the largest unassigned value of J, find the group of 
+    #    levels with the smallest value of [spread(Erel)/Escale + spread(term comp)]
+    # Smallest value must be at least "thr" smaller than the next value
+    # Return the number of levels assigned
+    # KKI 11/1/2024
+    Jmax = 0
+    for J, nleft in J_left.items():
+        if nleft > 0:
+            Jmax = max(Jmax, J)
+    degen = int(2*Jmax + 1)
+    if verbose:
+        print(f'\n--- Look for tightest group of {degen} levels for J = {chem.halves(Jmax)} ---')
+    df_unassigned = df_soE[df_soE['J'].isnull()]
+    dfJmax = Jposs_subdf(df_unassigned, Jmax)
+    ilo = []
+    sprE = []
+    sprTC = []
+    for i in range(len(dfJmax) - degen):
+        subdf = dfJmax.iloc[i : i+degen]
+        spr, cspr, maxcspr = spreads_ETC(subdf)
+        ilo.append(i)
+        sprE.append(spr)
+        sprTC.append(maxcspr)
+    spr = np.array(sprE) / Escale + np.array(sprTC)
+    idx = np.argsort(spr)
+    imin = idx[0]
+    inext = idx[1]
+    if spr[imin] < spr[inext] - thr:
+        istart = ilo[imin]
+        idx = dfJmax.index.values[istart : istart + degen]
+        if verbose:
+            print(f'    Assigning these levels: {idx}')
+        record_J_assignment(df_soE, J_left, idx, Jmax)
+        return degen
+    else:
+        if verbose:
+            print(f'    No group is clearly tighter than the next (thr = {thr})')
+            #print(np.round(spr, 1))
+        return 0
+##
+'''
 def elim_implausible_J(df_soE, J_left, thr_big=500, thr_tcbig=15, verbose=False):
     '''
     See if some possible J values can be eliminated for lack of enough similar levels
-    Return number of levels assigned
+    Return number of possibilities eliminated
     For atomic calculations
     Args: 
       df_soE : DataFrame of results from soci_energies()
@@ -1907,9 +1963,9 @@ def elim_implausible_J(df_soE, J_left, thr_big=500, thr_tcbig=15, verbose=False)
       thr_big   :  energy criterion for being dissimilar (cm-1)
       thr_tcbig :  term-composition dissimilarity criterion (%)
     '''
-    showcols = ['Erel', 'J_poss', 'term_comp']
+    showcols = ['Erel', 'J_poss', 'TC_approx']
     if verbose:
-        print('--- Eliminate implausible "possible" values of J ---')
+        print('\n--- Eliminate implausible "possible" values of J ---')
     Jvals = sorted(J_left.keys(), reverse=True)  # start with highest degeneracy
     dfunk = df_soE[df_soE.J.isnull()]
     nelim = 0
@@ -1918,7 +1974,7 @@ def elim_implausible_J(df_soE, J_left, thr_big=500, thr_tcbig=15, verbose=False)
         if len(dfJ) < 1:
             continue
         if verbose:
-            print('J = ', J)
+            print('    J = ', J)
         degen = int(2*J + 1)
         # rows are sorted by energy, so look at the first and last set of "degen" levels
         for iloop in [1, 0]:
@@ -1935,7 +1991,7 @@ def elim_implausible_J(df_soE, J_left, thr_big=500, thr_tcbig=15, verbose=False)
                 # differences are not suffiently dramatic
                 continue
             dfa['Eincr'] = Eincr
-            dfa['TCincr'] = TCincr
+            dfa['TCincr'] = np.round(TCincr, 2)
             if verbose:
                 chem.displayDF(dfa[showcols + ['Eincr', 'TCincr']])
             # eliminate this value of J for levels up to the break
@@ -1947,7 +2003,7 @@ def elim_implausible_J(df_soE, J_left, thr_big=500, thr_tcbig=15, verbose=False)
                 # modify at 'icut' and above
                 idx = dfa.index[ijump:]
             if verbose:
-                print(f'Eliminate J = {J} for rows {idx.values}')
+                print(f'    Eliminate J = {J} for rows {idx.values}')
             for irow in idx:
                 df_soE.at[irow, 'J_poss'].remove(J)
             nelim += len(idx)
@@ -2186,4 +2242,17 @@ def color_by_orb(dforb, c1='white', c2='lightgrey'):
     styler = styler.hide()  # suppress the index, which is differently shaded
     chem.displayDF(styler)
     return 
+##
+def uncrowd_DExp(line):
+    # Given a string, return another string that inserts spaces after E- or D-format
+    #   numbers (useful when spaces are lacking)
+    # Assume two digits in the exponent
+    retval = re.sub(r'([DE][-]?\d\d)', r'\1 ', line)
+    return retval
+##
+def uncrowd_energies(line):
+    # Try to repair text line with run-on, negative-valued numbers
+    re_collide = re.compile('(\d)[-](\d+\.)')
+    retval = re_collide.sub(r'\1 -\2', line)
+    return retval
 ##
