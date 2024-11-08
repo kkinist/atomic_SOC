@@ -1,0 +1,35 @@
+***,Be SO-CI
+memory,1000,M;
+
+gprint,orbitals,civector,basis;
+
+symmetry,xyz
+geometry={Be};
+
+basis={
+spdf,be,aug-cc-pwCVTZ-DK;C; spd,1,even,nprim=1,ratio=3.0;
+}
+
+set,dkho=101
+
+{rhf;wf,nelec=4,sym=1,spin=0}
+
+{multi
+    closed,1,0
+    occ,3,3
+    wf,sym=1,spin=0;state,7;
+    wf,sym=1,spin=2;state,4;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+{ci;wf,sym=1,spin=0;state,7; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=2;state,4; save,5202.2}
+hlsdiag(8) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5201.2,5202.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
