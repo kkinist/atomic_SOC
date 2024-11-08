@@ -1,0 +1,43 @@
+***,Sn SO-CI
+! Heaver weight on the three ground terms
+memory,1500,M;
+
+gprint,orbitals,civector,basis;
+
+symmetry,xyz
+geometry={Sn};
+
+basis={
+ecp,sn,ECP28MDF;
+spdfgh,sn,aug-cc-pwCVQZ-PP;C; spdf,1,even,nprim=1,ratio=3.0;
+}
+
+! spherical anion orbitals (4S)
+{rhf; wf,nelec=23,sym=2,spin=3}
+
+NTRIP=12
+NSING=15
+
+! add 6p to active space
+{multi
+    closed,6,3
+    occ,7,9
+    wf,nelec=22,sym=1,spin=2;state,NTRIP;
+	weight,3[5],(NTRIP-3)[1]
+    wf,nelec=22,sym=1,spin=0;state,NSING;
+	weight,6[5],(NSING-6)[1]
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5201.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=0;state,NSING; save,5101.2}
+hlsdiag(NTRIP+1) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5201.2,5101.2;print,vls=0,hls=0} !compute and diagonalize SO matrix

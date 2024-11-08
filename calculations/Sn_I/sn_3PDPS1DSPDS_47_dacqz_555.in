@@ -1,0 +1,43 @@
+***,Sn SO-CI
+memory,1300,M;
+
+gprint,orbitals,civector,basis;
+
+symmetry,xyz
+geometry={Sn};
+
+basis={
+spdfgh,sn,aug-cc-pwCVQZ-DK3;C; spdf,1,even,nprim=1,ratio=3.0;
+}
+
+set,dkho=101
+
+! spherical dication (1S) orbitals
+{rhf;wf,nelec=48,sym=1,spin=0}
+
+NTRIP=12
+NSING=15
+
+! (4/7) active space (s + 2*p)
+{multi
+    occ,15,15
+    wf,nelec=50,sym=1,spin=2;state,NTRIP; weight,3[5],(NTRIP-3)[1]
+    expec2,lxx,lyy,lzz;
+    wf,nelec=50,sym=1,spin=0;state,NSING; weight,6[5],(NSING-6)[1]
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+! free KL shells
+core,8,6
+
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5203.2}
+hlsdiag = energd4
+{ci;wf,sym=1,spin=0;state,NSING; save,5201.2}
+hlsdiag(NTRIP+1) = energd4
+
+table,hlsdiag
+
+!lsint
+{ci;hlsmat,ls,5203.2,5201.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
