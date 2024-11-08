@@ -7933,6 +7933,9 @@ def possible_J_from_term(term):
     # given a term symbol like '(1)1D', return a list of
     # possible values of J
     S, L = SL_from_term(term)
+    if S is None:
+        # failure parsing term symbol
+        return None
     #jvals = [abs(L - ms) for ms in np.arange(-S, S+1)]   wrong!
     jvals = np.arange(abs(L - S), L+S+1)
     return np.round(jvals, 1)
@@ -7960,7 +7963,7 @@ def possible_J_from_ASD_label(lbl):
 def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
                               always=False):
     '''
-    Assign unique, enumerative labels to experimental terms
+    Assign unique, enumerative labels to experimental atomic terms
     
     'dfexpt' is a DataFrame ultimately from NIST ASD
      dfexpt must have columns "Configuration", "Term", "J"
@@ -7968,25 +7971,34 @@ def unique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
      Return a new DataFrame with added column 'newcol'
      Accept both standard term symbols and symbols like "2[5/2]" and "(1/2,1/2)"
      Assume that like terms for different configurations are different
+     Fix for duplicate labels within one configuration (11/6/2024)
     '''
-    dfret = dfexpt.copy()
     # strip the term labels of any ordinal letter-prefix
     re_a = re.compile(r'[a-z]\s')
     sterm = []
-    for t in dfret.Term:
-        sterm.append(re_a.sub('', t))
+    for t in dfexpt.Term:
+        t2 = re_a.sub('', t)
+        sterm.append(t2)
     uterm = []
     count = {}   # numerical prefix for each term label
     tconfig = {} # list of configurations for each term label
-    for conf, trm in zip(dfret.Configuration, sterm):
+    olbl = {}    # list of original term labels for each truncated label
+    for conf, trm, oterm in zip(dfexpt.Configuration, sterm, dfexpt.Term):
         if trm not in count:
             count[trm] = 0
             tconfig[trm] = []
+            olbl[trm] = []
         if conf not in tconfig[trm]:
             # this is a new instance of this label
             count[trm] += 1
             tconfig[trm].append(conf)
+            olbl[trm].append(oterm)
+        elif oterm not in olbl[trm]:
+            # same configuration but different term
+            count[trm] += 1
+            olbl[trm].append(oterm)
         uterm.append(f'({count[trm]}){trm}')
+    dfret = dfexpt.copy()
     dfret[newcol] = uterm
     return dfret
 ##
@@ -8050,7 +8062,7 @@ def SL_from_term(term):
             diatom = True
         else:
             print_err('', 'not recognized as a term symbol: {:s}'.format(term), halt=False)
-            return None
+            return None, None
     mult = int(m.group(1))
     symb = m.group(2)
     S = (mult - 1)/2
