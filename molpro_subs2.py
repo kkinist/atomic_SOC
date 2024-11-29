@@ -120,7 +120,7 @@ def identify_sections(fpro):
     re_rhf = re.compile('Program \* Restricted Hartree-Fock')
     re_multi = re.compile('PROGRAM \* MULTI')
     re_mrci = re.compile('PROGRAM \* CI')
-    #re_soint = re.compile('PROGRAM \* SEWLS')
+    re_soint = re.compile('PROGRAM \* SEWLS')
     re_soci = re.compile('\* Spin-orbit calculation \*')
     
     with open(fpro, 'r') as F:
@@ -144,9 +144,9 @@ def identify_sections(fpro):
                 # this hits spin-orbit CI, but won't store it as 'mrci'
                 store_section()
                 sec_name = 'mrci'
-            #if re_soint.search(line):
-            #    store_section()
-            #    sec_name = 'SOintegrals'
+            if re_soint.search(line):
+                store_section()
+                sec_name = 'SOintegrals'
             if re_soci.search(line):
                 sec_name = 'soci'
             linebuf.append(line)
@@ -805,6 +805,9 @@ def mrci_results(linebuf):
     re_civec = re.compile(r' [20/\\]+(\s+[-]?\d\.\d+)+')
     re_state = re.compile(r' RESULTS FOR STATE\s*(\d+\.\d)')
     re_c0 = re.compile(r'([-]?\d\.\d+) \(([a-z]+)\)')
+    re_coefxmat = re.compile(' Coefficients of fixed reference functions:')
+    re_first = re.compile(r'\s*\d+(\s+[-]?\d+\.\d)+')  # int + floats
+    re_contin = re.compile(r'(\s+[-]?\d+\.\d)+')  # just floats
     energy_types = {'ref E': re.compile(r' Reference energy\s+([-]?\d+\.\d+)'),
                    'nuc E': re.compile(r' Nuclear energy\s+([-]?\d+\.\d+)'),
                    'kin E': re.compile(r' Kinetic energy\s+([-]?\d+\.\d+)'),
@@ -826,7 +829,23 @@ def mrci_results(linebuf):
     label = ''
     state = {}  # key = state label, value = dict of info
     trans = []  # transition moments
+    in_coefxmat = False
+    coefxmat = []  # list of list; coefficients of fixed ref functions
+    coefx = []  # coeffs for one state
     for line in linebuf:
+        if in_coefxmat:
+            if re_first.match(line):
+                # first line
+                if len(coefx) > 0:
+                    # save coeffs for preceding state
+                    coefxmat.append(coefx)
+                coefx = [float(x) for x in line.split()[1:]]
+            elif re_contin.match(line):
+                coefx.extend([float(x) for x in line.split()])
+            elif len(coefx) > 0:
+                # done reading coeff matrix
+                coefxmat.append(coefx)
+                in_coefxmat = False
         if in_civec:
             if re_blank.match(line):
                 in_civec = False
@@ -874,6 +893,8 @@ def mrci_results(linebuf):
             d = {'bra': m.group(1), 'op': m.group(2), 'ket': m.group(3),
                 'value': float(m.group(4))}
             trans.append(d)
+        if re_coefxmat.match(line):
+            in_coefxmat = True
                 
     # make the DataFrame of configurational coefficients
     cols = ['config'] + [str(n) for n in range(nstate)]
@@ -882,6 +903,7 @@ def mrci_results(linebuf):
     retval['civec'] = pd.DataFrame(columns=cols, data=vecdat).astype(dtyped)
     retval['state'] = state
     retval['transmom'] = trans
+    retval['coefxmat'] = np.array(coefxmat)
     return retval
 ##
 def coefficients_of_refs(linebuf, kind='fixed'):
