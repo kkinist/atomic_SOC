@@ -1,0 +1,32 @@
+***,Pb SO-CI
+memory,1500,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Pb};
+
+basis=aug-cc-pwCV5Z-PP
+
+! spherical anion orbitals (4S)
+{rhf; wf,charge=-1,sym=2,spin=3}
+
+NTRIP=3
+
+{multi
+    closed,6,3
+    occ,7,6
+    wf,charge=0,sym=1,spin=2;state,NTRIP;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=1,spin=2;state,NTRIP; save,5201.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5201.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
