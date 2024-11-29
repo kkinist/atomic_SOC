@@ -1807,10 +1807,10 @@ class Geometry(object):
                 self.atom.append(at)
             return
         if intype == 'DataFrame':
-            # argument is a four-column pandas DataFrame (Z, x, y, z)
+            # argument is a pandas DataFrame with leading columns (Z, x, y, z)
             for iat in range(len(args[0].index)):
                 elxyz = args[0].iloc[iat]
-                at = Atom(elxyz[0], elxyz[1:4].tolist())
+                at = Atom(elxyz.iloc[0], elxyz.iloc[1:4].tolist())
                 self.atom.append(at)
     def copy(self, elements=[], atoms=[]):
         # A restrictive list of elements XOR atom numbers may be provided
