@@ -1521,19 +1521,23 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
     dfsort = dfraw.sort_values(cols[0]).copy().reset_index(drop=False)
     nrow = len(dfsort)
     included = []  # list of row numbers
-    for irow in range(nrow - 1):
+    for irow in range(nrow):
         if irow in included:
             continue
         # Does this row match the following?
-        match = True
-        for col, tol in zip(cols, thr):
-            x1 = dfsort.at[irow, col]
-            x2 = dfsort.at[irow + 1, col]
-            if tol:
-                match = match and (abs(x2 - x1) <= tol)           
-            else:
-                # tol = 0 means that items must be exactly equal
-                match = match and (x1 == x2)
+        if irow < (nrow - 1):
+            match = True
+            for col, tol in zip(cols, thr):
+                x1 = dfsort.at[irow, col]
+                x2 = dfsort.at[irow + 1, col]
+                if tol:
+                    match = match and (abs(x2 - x1) <= tol)           
+                else:
+                    # tol = 0 means that items must be exactly equal
+                    match = match and (x1 == x2)
+        else:
+            # this is the last row and it has not been matched
+            match = False
         if match:
             for col in data.keys():
                 x1 = dfsort.at[irow, col]
