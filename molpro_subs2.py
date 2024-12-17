@@ -727,7 +727,7 @@ def mrci_info(linebuf):
     # return a dict of the basic parameters in the MRCI
     re_sym = re.compile(r' Reference symmetry:\s+(\d)\s+([A-Z][a-z]+et)')
     re_nelec = re.compile(r' Number of electrons:')
-    re_spaces = re.compile(r' Number of ([a-z]+)\s+orbitals:')
+    re_spaces = re.compile(r' Number of ([-a-z]+)\s+orbitals:')
     re_nstate = re.compile(r' Number of optimized states:\s*(\d+)')
 
     spaces = {}  # key = orbital space, value = number by irrep (or total)
@@ -1196,10 +1196,18 @@ def soci_matrix(linebuf):
     basis = [{} for i in range(dimen)]
     somat = np.zeros((dimen, dimen), dtype=complex)
     retval = {'basis': basis, 'matrix': somat}
-    for line in linebuf:
+    ndec = None; sdec = ''
+    for lin in linebuf:
+        line = lin.replace('-', ' -') # ensure that space precedes minus sign
         if re_hdr.match(line):
             cols = [int(x) for x in line.split()[4:]]
         if re_re.match(line):
+            if ndec is None:
+                # find out how many digits are being printed after the decimal
+                ndec = len(line.split()[-1].split('.')[-1])
+                sdec = '\.' + '\d' * ndec
+            # ensure that space follows decimal numbers
+            line = re.sub(sdec, '\g<0> ', line)
             w = line.split()
             nr = int(w.pop(0))
             st = w.pop(0)
