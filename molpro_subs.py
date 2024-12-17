@@ -83,7 +83,7 @@ class MULTI:
     def __init__(self, linebuf, PG=None, parity=True, atom=False, quiet=False):
         self.lines = linebuf
         self.PG = PG
-        self.nfrozen = self.nfrozen()
+        self.nclosed = self.nclosed()
         self.norb = self.nactorb()
         self.groups = self.parseGroups()
         self.results = self.parseResults(atom=atom)
@@ -91,7 +91,7 @@ class MULTI:
         self.NOs = self.natorb_info(quiet=quiet, require=False)
         self.civec = self.parseMULTIcivec()
     def print(self):
-        print('{:d} closed-shell orbitals'.format(self.nfrozen))
+        print('{:d} closed-shell orbitals'.format(self.nclosed))
         print('{:d} active orbitals'.format(self.norb))
         print('Groups:')
         for g in self.groups:
@@ -100,8 +100,8 @@ class MULTI:
         # print the lines from MOLPRO output
         print('\n'.join(self.lines))
         return
-    def nfrozen(self):
-        # the number of frozen-core aka closed-shell orbitals
+    def nclosed(self):
+        # the number of closed-shell orbitals
         # If it's zero, that is not stated in the MOLPRO output
         rx = re.compile(r' Number of closed-shell orbitals:\s+(\d+) ')
         for line in self.lines:
