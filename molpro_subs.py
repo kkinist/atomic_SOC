@@ -4691,7 +4691,10 @@ def termLabels(casDF, greek=True, hyphen=False, PG=None, parity=True):
             lbl.append(s)
     else:
         # linear molecule
-        for irow, lzsq in enumerate(casDF['LzLz']):
+        for irow, lzlz in enumerate(casDF['LzLz']):
+            if lzlz < 0:
+                print(f'Taking absolute value of LZLZ = {lzlz}')
+            lzsq = abs(lzlz)
             Lval = int(np.round(np.sqrt(lzsq)))
             if greek:
                 lbl.append(GLAMBDA[Lval])
