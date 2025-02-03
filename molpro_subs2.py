@@ -553,10 +553,11 @@ def multi_expec(linebuf):
     df = pd.DataFrame(data)
     return df
 ##
-def multi_transmom(linebuf):
+def multi_transmom(linebuf, au=False):
     # Given relevant lines, as from multi_sections()['trans'][0],
     # return a dict of DataFrames of off-diagonal transition moments
-    regex = re.compile(r' \!MCSCF trans\s+<(\d+\.\d)\|([A-Z]+)\|(\d+\.\d)')
+    regex = re.compile(r' \!MCSCF trans\s+<(\d+\.\d(?: [A-Z][a-z]+et)?)\|([A-Z]+)\|(\d+\.\d(?: [A-Z][a-z]+et)?)')
+    # regex = re.compile(r' \!MCSCF trans\s+<(\d+\.\d)\|([A-Z]+)\|(\d+\.\d)')
     transmom = {}  # key = operator, value = {'bra': [], 'ket': [], 'value': []}
     for line in linebuf:
         m = regex.match(line)
@@ -568,7 +569,12 @@ def multi_transmom(linebuf):
             ket = m.group(3)
             transmom[op]['bra'].append(bra)
             transmom[op]['ket'].append(ket)
-            x = float(line.replace('D', 'E').split()[3])
+            # discard all to the left of the ket bracket ">"
+            line = '>'.join(line.split('>')[1:])
+            if au:
+                x = float(line.replace('D', 'E').split()[0])  # value in a.u.
+            else:
+                x = float(line.replace('D', 'E').split()[3])  # other units
             transmom[op]['value'].append(x)
     retval = {}
     for op, vald in transmom.items():
@@ -1020,11 +1026,12 @@ def soci_sections(inbuf):
         return
     
     re_basprop = re.compile('Property matrices in the basis of the zeroth-order wave-functions')
-    re_socalc = re.compile('Spin-orbit calculation in the basis of zeroth order wave functions')
+    re_socalc = re.compile('Spin-orbit calculation in the basis of zeroth order wave functions|' +
+                           'Results for symmetry \d')
     re_levels = re.compile(' Spin-orbit eigenstates|( =>)? Eigenvalues of( the)? spin-orbit matrix')
     re_vecs = re.compile('( =>)? Eigenvectors of spin-orbit matrix| Spin-orbit eigenvectors ')
     re_compos = re.compile(' Composition of spin-orbit eigenvectors')
-    re_prop = re.compile(' Property matrices transformed in SO basis')
+    re_prop = re.compile(r' Property matrices transformed in SO basis| Property matrix of the DMX operator')
     re_stars = re.compile(r'\*{80}')
     
     for line in inbuf:
@@ -1094,7 +1101,7 @@ def soci_basis_prop(linebuf, nmrci):
     #    key = operator name, for corresponding matrix
     # 'linebuf' is a list of lines of text as from soci_section()['basis_prop'][0]
     # 'nmrci' is the matrix dimension = number of MRCI basis (spatial) states
-    re_op = re.compile(r' Property matrix for the\s+([A-Z]+)\s+operator')
+    re_op = re.compile(r' (?:The p|P)roperty matrix for the\s+([A-Z]+)\s+operator')
     re_hdr = re.compile(r'\s+Nr\s+Nr\'\s+State\s+S(\s+\d+)+')
     re_data = re.compile(r'\s+\d+\s+\d+\s+\d+\.\d\s*\d+\.\d(\s+[-]?\d+\.\d+)+')
     retval = {}
@@ -1128,24 +1135,75 @@ def soci_matelems(linebuf):
     # Return a list of dict, one element for each group of reported elements
     # 'linebuf' is a list of lines of text as from soci_section()['matel_comp'][0]
     re_rec = re.compile(r' (Bra|Ket)-wavefunction restored from record\s+(\d+\.\d)')
+    re_opsym = re.compile(r' Symmetry of spin-orbit operator')
     re_sym = re.compile(r' Symmetry of (bra|ket) wavefunction:\s+\d\s+S=\s*(\d+\.\d)\s+MS=\s*([-]?\d+\.\d)')
     re_optype = re.compile(r' Spin-orbit matrix elements .* operator')
     re_elem = re.compile(r' !MRCI trans\s+<(\d+\.\d)\|(LS[XYZ])\|(\d+\.\d)>\s+([-]?\d+\.\d+[i]?) au')
     
     retval = []
+    bra_rec = ket_rec = ''
+    for line in linebuf:
+        m = re_rec.match(line)
+        if m:
+            if m.group(1) == 'Bra':
+                bra_rec = m.group(2)
+            else:
+                ket_rec = m.group(2)
+        if re_opsym.match(line):
+            # New group of elements
+            d = {'bra': {'record': bra_rec}, 'ket': {'record': ket_rec}}
+            retval.append(d)
+        m = re_sym.match(line)
+        if m:
+            d[m.group(1)]['S'] = float(m.group(2))
+            d[m.group(1)]['MS'] = float(m.group(3))
+        if re_optype.match(line):
+            # matrix elements are listed for two variants of the LS operator
+            if 'mean field' in line:
+                op_type = 'MF'
+            elif 'Breit-Pauli' in line:
+                op_type = 'BP'
+            else:
+                op_type = '??'
+            if 'elems' not in d.keys():
+                d['elems'] = {op_type: []}
+            else:
+                # add to existing dict
+                d['elems'][op_type] = []
+        m = re_elem.match(line)
+        if m:
+            td = {'op': m.group(2), 'bra': m.group(1), 'ket': m.group(3)}
+            # value of matrix element is in Hartree
+            td['value'] = complex(m.group(4).replace('i', 'j'))
+            d['elems'][op_type].append(td)
+    return retval
+##
+def xxxsoci_matelems(linebuf):
+    # Read SO matrix elements as they are reported one by one
+    # Return a list of dict, one element for each group of reported elements
+    # 'linebuf' is a list of lines of text as from soci_section()['matel_comp'][0]
+    re_rec = re.compile(r' (Bra|Ket)-wavefunction restored from record\s+(\d+\.\d)')
+    re_sym = re.compile(r' Symmetry of (bra|ket) wavefunction:\s+\d\s+S=\s*(\d+\.\d)\s+MS=\s*([-]?\d+\.\d)')
+    re_optype = re.compile(r' Spin-orbit matrix elements .* operator')
+    re_elem = re.compile(r' !MRCI trans\s+<(\d+\.\d)\|(LS[XYZ])\|(\d+\.\d)>\s+([-]?\d+\.\d+[i]?) au')
+    
+    retval = []
+    d = {}
     for line in linebuf:
         m = re_rec.match(line)
         if m:
             if m.group(1) == 'Bra':
                 # new group of elements
+                if d:
+                    retval.append(d)
                 d = {'bra': {'record': m.group(2)}}
-                retval.append(d)
+                #retval.append(d)
             else:
                 d['ket'] = {'record': m.group(2)}
         m = re_sym.match(line)
         if m:
-            d[m.group(1)]['S'] = m.group(2)
-            d[m.group(1)]['MS'] = m.group(3)
+            d[m.group(1)]['S'] = float(m.group(2))
+            d[m.group(1)]['MS'] = float(m.group(3))
         if re_optype.match(line):
             # matrix elements are listed for two variants of the LS operator
             if 'mean field' in line:
@@ -1170,7 +1228,7 @@ def soci_matelems(linebuf):
 def soci_E0(linebuf):
     # return the value of E0 (energy of lowest basis state)
     # 'linebuf' is a list of lines of text as from soci_section()['so_calc'][0]
-    re_e0 = re.compile(r'E0\s*=\s+([-]?\d+\.\d+)')
+    re_e0 = re.compile(r'E0\s*=\s*([-]?\d+\.\d+)')
     e0 = 0
     for line in linebuf:
         m = re_e0.search(line)
@@ -1316,7 +1374,8 @@ def soci_composition_even(linebuf):
     retval = {'basis': basis, 'matrix': compos}
     
     re_dat = re.compile(r'(\s+\d+){4}\s+\|\d+ \d+>[-+]?(\s+\d+\.\d+)+')
-    for line in linebuf:
+    for rawline in linebuf:
+        line = rawline.replace('%', '')
         w = line.split()
         if re_hdr.match(line):
             icols = [int(n)-1 for n in w[7:]]
@@ -1341,30 +1400,33 @@ def soci_energies(linebuf):
     #  key = 'Erel', for energies in cm-1 relative to ground level
     #  key = 'Eshift' for energies in cm-1 relative to lowest basis state
     # 'linebuf' is a list of lines of text as from soci_section()['so_levels'][0]
-    re_data = re.compile(r'\s+\d+(\s+[-]?\d+\.\d+)+')
+    re_data = re.compile(r'(?:\s+\d+){1,2}(\s+[-]?\d+\.\d+)+')
     
     eabs = []
     eshift = []
     erel = []
     retval = {'E': eabs, 'Eshift': eshift, 'Erel': erel}
-    iabs = irel = ishift = 9999
+    iabs = irel = ishift = n1 = 9999
     for rawline in linebuf:
         line = uncrowd_energies(rawline) # in case a space is lost to large energy
         if 'Nr' in line:
             # first header line
             w1 = line.split()[1:]
+            n1 = len(w1)
         elif 'au' in line:
             # second header line
             w2 = line.split()
+            n2 = len(w2)
             # identify columns of interest
-            for i, a1 in enumerate(w1):
-                a2 = w2[i]
+            for i, a2 in enumerate(w2):
+                j = i + n1 - n2
+                a1 = w1[j]
                 if (a1 == 'E') and ('au' in a2):
-                    iabs = i
+                    iabs = j
                 if (a1 == 'E-E0') and ('cm' in a2):
-                    ishift = i
+                    ishift = j
                 if (a1 == 'E-E(1)') and ('cm' in a2):
-                    irel = i
+                    irel = j
         elif re_data.match(line):
             w = line.split()
             w.pop(0)  # discard the 'Nr'
@@ -1380,13 +1442,17 @@ def soci_propmats(linebuf, dimen):
     # 'dimen' is the number of states
     re_hdr = re.compile(r'(\s+\d+)+$')
     re_data = re.compile(r'\s*\d+(\s+[-]?\d+\.\d+)+')
+    re_dip = re.compile(r' Property matrix of the (DM.) operator in a\.u\.')
+    re_hdrB = re.compile(r'  Nr Sym / Nr\. (\s+\d+)+$')
     
     retval = {}
     cols = []
     op = ''
     pmat = np.zeros((dimen, dimen))
+    style = ''  # which format in Molpro file
     for line in linebuf:
         if 'TRANSFORMED' in line:
+            style = 'A'
             if op:
                 # save previous operator
                 retval[op] = pmat
@@ -1394,8 +1460,21 @@ def soci_propmats(linebuf, dimen):
             w = line.replace(')', '').split()
             op = f'{w[0]}_{w[-1]}'
             pmat = np.zeros((dimen, dimen))
+        m = re_dip.match(line)
+        if m:
+            style = 'B'
+            if op:
+                # save previous operator
+                retval[op] = pmat
+            # get operator name 
+            op = m.group(1)
+            pmat = np.zeros((dimen, dimen))
         if re_hdr.match(line):
             cols = [int(n) for n in line.split()]
+        if re_hdrB.match(line):
+            print(line.rstrip())
+            cols = [int(n) for n in line.split()[4:]]
+            print(cols)
         if re_data.match(line):
             w = line.split()
             irow = int(w.pop(0)) - 1
@@ -1514,7 +1593,18 @@ def final_times(fname):
             m = re_real.match(line)
             if m:
                 real = float(m.group(1))
-    return cpu, real
+    # create readable string
+    m = real / 60.; h = m / 60.; d = h / 24.
+    if d > 1:
+        s = f'{d:.1f} days'
+    elif h > 1:
+        s = f'{h:.1f} hours'
+    elif m > 1:
+        s = f'{m:.1f} minutes'
+    else:
+        s = f'{s:.1f} seconds'
+    print(f'The calculation took {s}')
+    return cpu, real, s
 ##
 def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'], 
                  thr=[1.e-6, 1.e-5, 0, 0, 0]):
