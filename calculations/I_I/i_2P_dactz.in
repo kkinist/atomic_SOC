@@ -1,0 +1,34 @@
+***,I SO-CI
+! active space (7/4)
+memory,1000,M;
+
+gprint,orbitals,civector;
+!gthresh,energy=1.d-10,coeff=1.d-8;
+
+symmetry,xyz
+geometry={I};
+
+
+basis={spdfg,i,aug-cc-pwCVTZ-DK3;C; spdf,1,even,nprim=1,ratio=3.0}
+
+set,dkho=101
+
+rhf
+
+{multi
+    closed,14,9
+    wf,sym=2,spin=1;state,3;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+! KLM-shell uncorrelated
+core,8,6
+
+{ci;wf,sym=2,spin=1;state,3; save,5203.2}
+hlsdiag = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ls,5203.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
