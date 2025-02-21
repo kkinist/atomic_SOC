@@ -772,6 +772,7 @@ def mrci_iterations(linebuf):
 
     retval = {}
     in_eref = in_iter = False
+    no_iter = True  # sometimes MRCI is used only to save, without iterating
     iterdat = []  # list of rows
     for rawline in linebuf:
         line = uncrowd_DExp(rawline)  # in case a space was lost to large time
@@ -783,6 +784,7 @@ def mrci_iterations(linebuf):
                 iterdat.append(line.replace('D', 'E').split())
         if re_hdr.match(line):
             in_iter = True
+            no_iter = False
             # replace embedded spaces
             cols = line.replace('AL EN', 'AL_EN').replace('GY CH', 'GY_CH').split()
         if in_eref:
@@ -797,9 +799,13 @@ def mrci_iterations(linebuf):
         m = re_saverec.match(line)
         if m:
             retval['saverec'] = m.group(1)
-    dtypel = [int]*3 + [float]*8
-    dtyped = {k: v for k, v in zip(cols, dtypel)}
-    retval['iterations'] = pd.DataFrame(columns=cols, data=iterdat).astype(dtyped)
+    if no_iter:
+        # No MRCI iterations
+        retval['iterations'] = None
+    else:
+        dtypel = [int]*3 + [float]*8
+        dtyped = {k: v for k, v in zip(cols, dtypel)}
+        retval['iterations'] = pd.DataFrame(columns=cols, data=iterdat).astype(dtyped)
     return retval
 ##
 def mrci_results(linebuf):
@@ -1138,11 +1144,13 @@ def soci_matelems(linebuf):
     re_opsym = re.compile(r' Symmetry of spin-orbit operator')
     re_sym = re.compile(r' Symmetry of (bra|ket) wavefunction:\s+\d\s+S=\s*(\d+\.\d)\s+MS=\s*([-]?\d+\.\d)')
     re_optype = re.compile(r' Spin-orbit matrix elements .* operator')
-    re_elem = re.compile(r' !MRCI trans\s+<(\d+\.\d)\|(LS[XYZ])\|(\d+\.\d)>\s+([-]?\d+\.\d+[i]?) au')
+    re_elem = re.compile(r' !MRCI trans\s+<(\d+\.\d)\|([A-Z]*LS[XYZ])\|(\d+\.\d)>\s+([-]?\d+\.\d+[i]?)\b')
     
     retval = []
     bra_rec = ket_rec = ''
     for line in linebuf:
+        if 'ECPLS' in line:
+            op_type = 'ECP'
         m = re_rec.match(line)
         if m:
             if m.group(1) == 'Bra':
@@ -1159,6 +1167,7 @@ def soci_matelems(linebuf):
             d[m.group(1)]['MS'] = float(m.group(3))
         if re_optype.match(line):
             # matrix elements are listed for two variants of the LS operator
+            # for ECP, nothing is listed
             if 'mean field' in line:
                 op_type = 'MF'
             elif 'Breit-Pauli' in line:
@@ -1172,56 +1181,12 @@ def soci_matelems(linebuf):
                 d['elems'][op_type] = []
         m = re_elem.match(line)
         if m:
-            td = {'op': m.group(2), 'bra': m.group(1), 'ket': m.group(3)}
+            op = m.group(2).replace('ECP', '')  # strip any ECP qualifier
+            td = {'op': op, 'bra': m.group(1), 'ket': m.group(3)}
             # value of matrix element is in Hartree
             td['value'] = complex(m.group(4).replace('i', 'j'))
-            d['elems'][op_type].append(td)
-    return retval
-##
-def xxxsoci_matelems(linebuf):
-    # Read SO matrix elements as they are reported one by one
-    # Return a list of dict, one element for each group of reported elements
-    # 'linebuf' is a list of lines of text as from soci_section()['matel_comp'][0]
-    re_rec = re.compile(r' (Bra|Ket)-wavefunction restored from record\s+(\d+\.\d)')
-    re_sym = re.compile(r' Symmetry of (bra|ket) wavefunction:\s+\d\s+S=\s*(\d+\.\d)\s+MS=\s*([-]?\d+\.\d)')
-    re_optype = re.compile(r' Spin-orbit matrix elements .* operator')
-    re_elem = re.compile(r' !MRCI trans\s+<(\d+\.\d)\|(LS[XYZ])\|(\d+\.\d)>\s+([-]?\d+\.\d+[i]?) au')
-    
-    retval = []
-    d = {}
-    for line in linebuf:
-        m = re_rec.match(line)
-        if m:
-            if m.group(1) == 'Bra':
-                # new group of elements
-                if d:
-                    retval.append(d)
-                d = {'bra': {'record': m.group(2)}}
-                #retval.append(d)
-            else:
-                d['ket'] = {'record': m.group(2)}
-        m = re_sym.match(line)
-        if m:
-            d[m.group(1)]['S'] = float(m.group(2))
-            d[m.group(1)]['MS'] = float(m.group(3))
-        if re_optype.match(line):
-            # matrix elements are listed for two variants of the LS operator
-            if 'mean field' in line:
-                op_type = 'MF'
-            elif 'Breit-Pauli' in line:
-                op_type = 'BP'
-            else:
-                op_type = '??'
             if 'elems' not in d.keys():
                 d['elems'] = {op_type: []}
-            else:
-                # add to existing dict
-                d['elems'][op_type] = []
-        m = re_elem.match(line)
-        if m:
-            td = {'op': m.group(2), 'bra': m.group(1), 'ket': m.group(3)}
-            # value of matrix element is in Hartree
-            td['value'] = complex(m.group(4).replace('i', 'j'))
             d['elems'][op_type].append(td)
     return retval
 ##
@@ -1580,7 +1545,7 @@ def soci_trans(linebuf, dimen):
         print(f'*** No values for <i|{op}|1> for bra =', nr)
     return retval
 ##
-def final_times(fname):
+def final_times(fname, verbose=True):
     # return final 'CPU' and 'REAL' times
     re_cpu = re.compile(' CPU TIMES\s+\*\s+(\d+\.\d+)')
     re_real = re.compile(' REAL TIME\s+\*\s+(\d+\.\d+)')
@@ -1603,7 +1568,8 @@ def final_times(fname):
         s = f'{m:.1f} minutes'
     else:
         s = f'{s:.1f} seconds'
-    print(f'The calculation took {s}')
+    if verbose:
+        print(f'The calculation took {s}')
     return cpu, real, s
 ##
 def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'], 
