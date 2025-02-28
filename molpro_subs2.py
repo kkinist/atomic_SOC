@@ -571,10 +571,14 @@ def multi_transmom(linebuf, au=False):
             transmom[op]['ket'].append(ket)
             # discard all to the left of the ket bracket ">"
             line = '>'.join(line.split('>')[1:])
+            s = line.replace('D', 'E')
             if au:
-                x = float(line.replace('D', 'E').split()[0])  # value in a.u.
+                if 'i' in s:
+                    x = complex(s.replace('i', 'j').split()[0])  # value in a.u.
+                else:
+                    x = float(s.split()[0])  # value in a.u.
             else:
-                x = float(line.replace('D', 'E').split()[3])  # other units
+                x = float(s.split()[3])  # other units
             transmom[op]['value'].append(x)
     retval = {}
     for op, vald in transmom.items():
@@ -1210,6 +1214,7 @@ def soci_matrix(linebuf):
     re_hdr = re.compile(r'\s+Nr\s+State\s+S\s+Sz(\s+\d+)+')
     re_re = re.compile(r'\s+\d+\s+\d+\.\d\s+\d+\.\d\s*[-]?\d+\.\d(\s+[-]?\d+\.\d+)+')
     re_im = re.compile(r'(\s+[-]?\d+\.\d+)+')
+    re_overflow = re.compile(r'[*]+')
     # first find the dimension of the matrix
     dimen = 0
     for line in linebuf:
@@ -1221,7 +1226,11 @@ def soci_matrix(linebuf):
     retval = {'basis': basis, 'matrix': somat}
     ndec = None; sdec = ''
     for lin in linebuf:
+        if re_overflow.search(line):
+            print(line.rstrip(), flush=True)
+            chem.print_err('', 'Overflow value in spin-orbit matrix')
         line = lin.replace('-', ' -') # ensure that space precedes minus sign
+        # check for matrix element overflow (failed calculation)
         if re_hdr.match(line):
             cols = [int(x) for x in line.split()[4:]]
         if re_re.match(line):
