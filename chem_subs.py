@@ -8870,3 +8870,16 @@ def sort_dict_by_value(d, reverse=False, lists=False):
     else:
         return retval
 ##
+def is_unitary(arr2d):
+    # Return whether the array is unitary
+    sh = arr2d.shape
+    if len(sh) != 2:
+        # not 2D
+        return False
+    if sh[0] != sh[1]:
+        # not square
+        return False
+    prod = arr2d.conj().T @ arr2d
+    identity = np.eye(arr2d.shape[0])
+    return np.allclose(prod, identity)
+##
