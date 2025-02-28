@@ -1,0 +1,39 @@
+***,Sb SO-CI
+memory,1500,M;
+
+gprint,orbitals,civector;
+
+symmetry,xyz
+geometry={Sb};
+
+basis=aug-cc-pwCVTZ-PP
+
+PAR=2  ! parity even (1) or odd (2)
+NQ=1
+ND=8
+
+{multi
+    closed,6,3
+    occ,7,9
+    wf,charge=0,sym=PAR,spin=3;state,NQ;
+    wf,charge=0,sym=PAR,spin=1;state,ND;
+    expec2,lxx,lyy,lzz;
+}
+table, energy, ll
+title, Energies and <L**2> values
+
+core,0,0
+
+{ci;wf,sym=PAR,spin=3;state,NQ; save,5302.2}
+if NQ.LT.2 then
+hlsdiag(1) = energd
+else
+hlsdiag = energd4
+endif
+
+{ci;wf,sym=PAR,spin=1;state,ND; save,5102.2}
+hlsdiag(NQ+1) = energd4
+
+table,hlsdiag
+
+{ci;hlsmat,ecp,5302.2,5102.2;print,vls=0,hls=0} !compute and diagonalize SO matrix
