@@ -1587,13 +1587,22 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
     #   collect them into terms and return a DataFrame
     # 'cols' are columns that must be identical to thresholds 'thr'
     # Other columns are returned as list of component values
+    # This version can detect non-adjacent pairs
     
     data = {'index': []}   # indices into dfraw
     data.update({k: [] for k in dfraw.columns})
-    # sort by first required column (such as 'E')
-    dfsort = dfraw.sort_values(cols[0]).copy().reset_index(drop=False)
+    # sort by first by columns requiring exact match (e.g., 'Lz')
+    excols = cols.copy()
+    for i, th in enumerate(thr):
+        if th != 0:
+            excols.remove(cols[i])
+    # then sort by energy 'E'
+    excols.append('E')
+    dfsort = dfraw.sort_values(excols).copy().reset_index(drop=False)
     nrow = len(dfsort)
     included = []  # list of row numbers
+    maxEspr = Espr = 0.    # largest deviation from Energy ('E') degeneracy for any pair
+    pairmax = []           # pair with largest non-degeneracy
     for irow in range(nrow):
         if irow in included:
             continue
@@ -1604,7 +1613,10 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
                 x1 = dfsort.at[irow, col]
                 x2 = dfsort.at[irow + 1, col]
                 if tol:
-                    match = match and (abs(x2 - x1) <= tol)           
+                    spr = abs(x2 - x1)
+                    match = match and (spr <= tol)
+                    if col == 'E':
+                        Espr = spr
                 else:
                     # tol = 0 means that items must be exactly equal
                     match = match and (x1 == x2)
@@ -1612,6 +1624,10 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
             # this is the last row and it has not been matched
             match = False
         if match:
+            if Espr > maxEspr:
+                maxEspr = Espr
+                pairmax = dfsort.loc[[irow, irow+1], 'index'].values
+            maxEspr = max(maxEspr, Espr)
             for col in data.keys():
                 x1 = dfsort.at[irow, col]
                 x2 = dfsort.at[irow + 1, col]
@@ -1643,6 +1659,8 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
                 data[col].append(x)
             included.append(irow)
     df = pd.DataFrame(data)
+    scm = maxEspr * chem.AU2CM
+    print(f'Largest accepted energy non-degeneracy = {scm:.1f} cm-1 for {pairmax}')
     return df
 ##
 def collect_atomic_terms(dfcas, Ecol):
