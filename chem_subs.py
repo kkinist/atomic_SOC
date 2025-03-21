@@ -8883,3 +8883,25 @@ def is_unitary(arr2d):
     identity = np.eye(arr2d.shape[0])
     return np.allclose(prod, identity)
 ##
+def is_hermitian(A):
+    # does matrix equal its conjugate transpose?
+    B = A.conj().T
+    return np.allclose(B, A)
+##
+def weight_Counter(wts, lbls, normsum=None, nround=None):
+    # like collections.Counter but return dict of weights instead of counts
+    # 'normsum' can have a numeric value (sum of returned weights)
+    # 'nround' can have an integer value (number of decimal digits)
+    retval = {}
+    for wt, lbl in zip(wts, lbls):
+        retval[lbl] = retval.get(lbl, 0) + wt
+    if normsum is not None:
+        # normalize the weights 
+        wtot = sum(retval.values())
+        for lbl in retval.keys():
+            retval[lbl] *= normsum / wtot
+    if nround is not None:
+        for lbl in retval.keys():
+            retval[lbl] = np.round(retval[lbl], nround)
+    return retval
+##
