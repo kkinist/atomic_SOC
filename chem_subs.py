@@ -21,6 +21,7 @@ import scipy.stats
 import matplotlib.pyplot as plt
 from urllib.request import urlopen
 from urllib.parse import quote
+from collections import Counter
 
 Avogadro_viewer = r"C:\Program Files (x86)\Avogadro\bin\avogadro.exe"
 
@@ -98,7 +99,7 @@ def isotopic_mass(atlabel):
     if atlabel in ['reference', 'source', 'citation']:
         # return the URI of the data source 
         return 'https://www.nist.gov/pml/atomic-weights-and-isotopic-compositions-relative-atomic-masses'
-    rxn = re.compile('\d+')
+    rxn = re.compile(r'\d+')
     rxsym = re.compile('[a-zA-Z]+')
     n = int(rxn.search(atlabel).group(0))
     sym = rxsym.search(atlabel).group(0)
@@ -1014,7 +1015,7 @@ def parse_ZMatrix(zlist, unitR='angstrom', unitA='degree'):
     maxlen = 0  # keep track of max number of words in line, 
     #  because its decrease will signal the beginning of the
     #  second section of the z-matrix (if any)
-    regexSplit = re.compile('[\s,=]+')
+    regexSplit = re.compile(r'[\s,=]+')
     for line in zlist:
         words = regexSplit.split(line)  # split on whitespace, comma, or equals
         nwords = len(words)
@@ -6892,7 +6893,8 @@ def round_half_int(x, quiet=False, thresh=0.001):
         print_err('', 'half-integer rounding exceeds {:f} for {:s}'.format(thresh, s), halt=False)
     # if integers, convert to int
     if not (hf - np.round(hf, 0)).any():
-        hf = hf.astype(int)
+        #hf = hf.astype(int)
+        hf = [int(x) for x in hf]  # get python int instead of numpy.int64
     # return a scalar if 'x' is scalar, otherwise a numpy array
     try:
         len(x)  # fails if 'x' is a scalar
@@ -6998,8 +7000,8 @@ def read_triangular_matrix(buf):
     # for parsing output files in general
     # the model for this is Gaussian's listing of NMR J-J couplings
     # return a list of raw indices and a symmetric square matrix (zero-indexed)
-    re_hdr = re.compile('^(\s+\d+)+\s*$')  # column numbers and nothing else
-    re_data = re.compile('^\s*\d+\s+[-]?\d+\.\d+')  # row number and a floatish
+    re_hdr = re.compile(r'^(\s+\d+)+\s*$')  # column numbers and nothing else
+    re_data = re.compile(r'^\s*\d+\s+[-]?\d+\.\d+')  # row number and a floatish
     cols = []
     for line in buf:
         # get all the column numbers
@@ -7345,7 +7347,7 @@ def enumerative_prefix(labels, always=False, style='numeric'):
 def strip_enumerative_prefix(label):
     # Given one label, return it with any enumerative prefixes removed
     # prefixes may be numeric or alpha
-    rx = re.compile('(?:\(\d+\))?(\d+.+)')
+    rx = re.compile(r'(?:\(\d+\))?(\d+.+)')
     m = rx.match(label)
     if m:
         return m.group(1)
@@ -7642,7 +7644,7 @@ def formula_to_atomlist(formula_in):
     prevlen = -1
     re_num = re.compile(r'\d+')
     # add '1' after any ')' that is not followed by a number
-    formula = re.sub('\)(?=\D)', ')1', formula_in)
+    formula = re.sub(r'\)(?=\D)', ')1', formula_in)
     if formula.endswith(')'):
         formula = formula + '1'
     # split at numbers, parentheses, element symbols
@@ -7827,8 +7829,8 @@ def atlist_from_formula(formula):
     #   of lists of elements like ['C', 'H', 'H', 'H', 'Cl']
     #   or 'sif' giving [['S', 'I', 'F'], ['Si', 'F']]
     # Non-alphanumeric characters are ignored
-    rx_s = re.compile('[a-zA-Z]+|\d+')
-    rx_num = re.compile('\d+')
+    rx_s = re.compile(r'[a-zA-Z]+|\d+')
+    rx_num = re.compile(r'\d+')
     
     m = rx_s.findall(formula)
     atlists = [[]]
@@ -7922,11 +7924,37 @@ def term_symbol(L, sp, parity=0, linear=True, ug=False):
         symb = f'{sprefix}{LSYMB[L]}{par.get(parity,"")}'
     return symb
 ##
-def omega_possible_from_term(term):
+def omega_possible_from_term(term, par=False):
     # for a diatomic molecule, given a term symbol, return a set of
     #   possible values for Omega: from |(Lambda - Sigma)| to (Lambda + Sigma)
+    # if parity==True, Omega is str that includes parity (integer only)
     S, L, parity = SL_from_term(term)
-    omposs = set(np.abs(np.arange(L-S, L+S+0.1)))
+    omlist = [float(x) for x in np.abs(np.arange(L-S, L+S+0.1))]
+    is_int = np.isclose(S, np.rint(S))
+    if par and is_int:
+        # Convert omlist to str that includes parity (when Omega=0)
+        par_str = {+1: '+', -1: '-'}  # for generating str
+        omstr = []
+        for om in omlist:
+            if om == 0:
+                # add parity
+                if L == 0:
+                    # Sigma term; start with superscript parity
+                    p = int(parity + '1') # 1 or -1
+                    # Add spin parity
+                    ps = (-1) ** S
+                    ostr = '0' + par_str[int(p*ps)]
+                    omstr.append(ostr)
+                else:
+                    # L != 0 generates 0+ and 0-
+                    omstr.append('0+')
+                    omstr.append('0-')
+            else:
+                # Omega != 0
+                omstr.append(f'{om:.0f}') # without decimal
+        omposs = set(omstr)
+    else:
+        omposs = set(omlist)
     return omposs
 ##
 def possible_J_from_term(term):
@@ -7948,7 +7976,7 @@ def possible_J_from_ASD_label(lbl):
     except:
         # non-standard label
         jvals = []
-        regex = re.compile('(\d)\[(\d+(?:/2))\]')
+        regex = re.compile(r'(\d)\[(\d+(?:/2))\]')
         m = regex.search(lbl)
         if m:
             smult = int(m.group(1))
@@ -8026,7 +8054,7 @@ def xxxunique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
             oldterm.append(lbl[1])
     letter_ord = False  # do term labels carry letter prefixes a, b, c?
     newsymb = []
-    rx_lett = re.compile('([a-z]\s)')
+    rx_lett = re.compile(r'([a-z]\s)')
     for tsymb in oldterm:
         m = rx_lett.search(tsymb)
         if m:
@@ -8050,8 +8078,8 @@ def SL_from_term(term):
     # given a term symbol like '(1)1D' or 'a 3D*', return the values of S and L
     # in diatomic (linear) case, return S and Lambda and parity
     # Return None upon failure
-    rx = re.compile('(\d+)([SPDFGHIKLMNOQRTUV])')
-    rx_grk = re.compile('(\d+)([{:s}])'.format(''.join(GLAMBDA)))
+    rx = re.compile(r'(\d+)([SPDFGHIKLMNOQRTUV])')
+    rx_grk = re.compile(r'(\d+)([{:s}])'.format(''.join(GLAMBDA)))
     diatom = False
     lsymb = 'SPDFGHIKLMNOQRTUV'
     m = rx.search(term)
@@ -8294,7 +8322,7 @@ def read_NIST_AEL_csv(file, simple_config=False, bare_term=False,
         print('*** Ambigous J values (see below).  Arbitrarily accepting first one!')
         displayDF(dfbad)
         df.J = df.J.apply(lambda x: x.split('or')[0])
-    rx_J = re.compile('^[ /\d]+$')  # legal values for 'J'
+    rx_J = re.compile(r'^[ /\d]+$')  # legal values for 'J'
     dfbad = df[df.J.apply(lambda x: False if rx_J.match(x) else True)]
     if len(dfbad):
         print('Some bad J values')
@@ -8303,7 +8331,7 @@ def read_NIST_AEL_csv(file, simple_config=False, bare_term=False,
     df['J'] = df.J.apply(lambda x: halves_to_float(x))
 
     # deal with problematic entries under 'E'
-    rx_E = re.compile('^[- \.\d+]+$')
+    rx_E = re.compile(r'^[- \.\d+]+$')
     dfbad = df[df.E.apply(lambda x: False if rx_E.match(x) else True)]
     if len(dfbad):
         print('Some non-numerical E values--erasing any question marks')
@@ -8311,7 +8339,7 @@ def read_NIST_AEL_csv(file, simple_config=False, bare_term=False,
         # remove any '?' trailing energies
         df['E'] = df['E'].str.replace(r'[?]', '', regex=True)
     # remove any rows that lack numerals under 'E'
-    rx_numer = re.compile('\d')
+    rx_numer = re.compile(r'\d')
     df = df[df.E.apply(lambda x: True if rx_numer.search(x) else False)]
     
     df = df.astype({'J': float})
@@ -8345,7 +8373,7 @@ def read_NIST_AEL_csv(file, simple_config=False, bare_term=False,
         # keep only the last word in term names
         df['Term'] = df['Term'].apply(lambda x: x.split()[-1])
     # remove numerals appended to term symbol, e.g. change '3P2' to '3P'
-    rx_t = re.compile('(\d+[A-Z])\d+')
+    rx_t = re.compile(r'(\d+[A-Z])\d+')
     df['Term'] = df['Term'].apply(lambda x: rx_t.sub(r'\1', x))
     
     return df
