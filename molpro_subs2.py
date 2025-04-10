@@ -116,12 +116,12 @@ def identify_sections(fpro):
         return
     
     re_top = re.compile('PROGRAM SYSTEM MOLPRO')
-    re_intgrl = re.compile('PROGRAM \* SEWARD')
-    re_rhf = re.compile('Program \* Restricted Hartree-Fock')
-    re_multi = re.compile('PROGRAM \* MULTI')
-    re_mrci = re.compile('PROGRAM \* CI')
-    re_soint = re.compile('PROGRAM \* SEWLS')
-    re_soci = re.compile('\* Spin-orbit calculation \*')
+    re_intgrl = re.compile(r'PROGRAM \* SEWARD')
+    re_rhf = re.compile(r'Program \* Restricted Hartree-Fock')
+    re_multi = re.compile(r'PROGRAM \* MULTI')
+    re_mrci = re.compile(r'PROGRAM \* CI')
+    re_soint = re.compile(r'PROGRAM \* SEWLS')
+    re_soci = re.compile(r'\* Spin-orbit calculation \*')
     
     with open(fpro, 'r') as F:
         for iline, line in enumerate(F):
@@ -180,7 +180,7 @@ def multi_sections(inbuf):
                        #r'\s+(\S+) \(energy\)\s+(\S+) \(step length\)')
     re_results = re.compile(r' Results for state\s*\d+\.\d')
     re_trans = re.compile(r' !MCSCF trans\s+<|[eE]xpectation values| !MCSCF expec\s+<')
-    re_natorb = re.compile('\s+NATURAL ORBITALS')
+    re_natorb = re.compile(r'\s+NATURAL ORBITALS')
     re_civec = re.compile(r' CI (vector|Coefficients) (of|for state) symmetry\s*\d+| CI vector\n')
     re_stars = re.compile(r'[*]{40}')
 
@@ -339,7 +339,7 @@ def state_symmetry_groups(linebuf):
     stsym = []
     regex = re.compile(r' State symmetry\s*(\d+)')
     re_nactel = re.compile(r' Number of active electrons:\s+(\d+)\s+Spin' +
-                       ' symmetry=(\w+)\s+Space symmetry=(\d)')
+                       r' symmetry=(\w+)\s+Space symmetry=(\d)')
     re_nstates = re.compile(r' Number of states:')
 
     for line in linebuf:
@@ -927,9 +927,9 @@ def coefficients_of_refs(linebuf, kind='fixed'):
     # return a matrix of coefficients, indices = (state, ref)
     # 'kind' can be 'fixed' or 'rotated'
     re_fixref = re.compile(f' Coefficients of {kind} reference functions:')
-    re_1st = re.compile('\s*\d+(\s+[-]?\d+\.\d+)+')
-    re_cont = re.compile('(\s+[-]?\d+\.\d+)+')
-    re_blank = re.compile('^\s*$')
+    re_1st = re.compile(r'\s*\d+(\s+[-]?\d+\.\d+)+')
+    re_cont = re.compile(r'(\s+[-]?\d+\.\d+)+')
+    re_blank = re.compile(r'^\s*$')
     rows = []  # list of matrix rows, as text
     inblock = row = False
     for line in linebuf:
@@ -957,7 +957,7 @@ def SO_integrals(linebuf):
     # return a dict 
     re_oper = re.compile('    Operator      Symmetry')
     re_intc = re.compile(' Integral cutoff: ')
-    re_oper = re.compile('\s+(LS[XYZ])\s+(\d)')
+    re_oper = re.compile(r'\s+(LS[XYZ])\s+(\d)')
 
     retval = {}
     op = {}
@@ -1036,8 +1036,8 @@ def soci_sections(inbuf):
         return
     
     re_basprop = re.compile('Property matrices in the basis of the zeroth-order wave-functions')
-    re_socalc = re.compile('Spin-orbit calculation in the basis of zeroth order wave functions|' +
-                           'Results for symmetry \d')
+    re_socalc = re.compile(r'Spin-orbit calculation in the basis of zeroth order wave functions|' +
+                           r'Results for symmetry \d')
     re_levels = re.compile(' Spin-orbit eigenstates|( =>)? Eigenvalues of( the)? spin-orbit matrix')
     re_vecs = re.compile('( =>)? Eigenvectors of spin-orbit matrix| Spin-orbit eigenvectors ')
     re_compos = re.compile(' Composition of spin-orbit eigenvectors')
@@ -1237,9 +1237,9 @@ def soci_matrix(linebuf):
             if ndec is None:
                 # find out how many digits are being printed after the decimal
                 ndec = len(line.split()[-1].split('.')[-1])
-                sdec = '\.' + '\d' * ndec
+                sdec = r'\.' + r'\d' * ndec
             # ensure that space follows decimal numbers
-            line = re.sub(sdec, '\g<0> ', line)
+            line = re.sub(sdec, r'\g<0> ', line)
             w = line.split()
             nr = int(w.pop(0))
             st = w.pop(0)
@@ -1556,8 +1556,8 @@ def soci_trans(linebuf, dimen):
 ##
 def final_times(fname, verbose=True):
     # return final 'CPU' and 'REAL' times
-    re_cpu = re.compile(' CPU TIMES\s+\*\s+(\d+\.\d+)')
-    re_real = re.compile(' REAL TIME\s+\*\s+(\d+\.\d+)')
+    re_cpu = re.compile(r' CPU TIMES\s+\*\s+(\d+\.\d+)')
+    re_real = re.compile(r' REAL TIME\s+\*\s+(\d+\.\d+)')
     cpu = real = -99
     with open(fname, 'r') as F:
         for line in F:
@@ -2370,7 +2370,7 @@ def uncrowd_DExp(line):
 ##
 def uncrowd_energies(line):
     # Try to repair text line with run-on, negative-valued numbers
-    re_collide = re.compile('(\d)[-](\d+\.)')
+    re_collide = re.compile(r'(\d)[-](\d+\.)')
     retval = re_collide.sub(r'\1 -\2', line)
     return retval
 ##
