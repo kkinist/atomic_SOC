@@ -336,9 +336,9 @@ class MULTI:
     def natorb_info(self, quiet=False, require=True):
         # return a DataFrame describing the natural orbitals
         # If require==False, print warning instead of error when NO's are missing
-        rx_NO = re.compile('\s+NATURAL ORBITALS')
+        rx_NO = re.compile(r'\s+NATURAL ORBITALS')
         rx_end = re.compile('Total charge:')
-        rx_data = re.compile('\s+\d+\.\d\s+[-]?\d\.\d+')
+        rx_data = re.compile(r'\s+\d+\.\d\s+[-]?\d\.\d+')
         cols = ['Orb', 'Occ', 'Active', 'E', 'Compos', 'Terse']
         orb = []  # orbital label, e.g. '3.1'
         occ = []  # occupation 
@@ -424,10 +424,10 @@ class MULTI:
         #   corresponding list of coefficients (must exceed 'thresh')
         rx_hdr = re.compile(r'CI (?:vector for state|Coefficients of) symmetry\s*(\d+)|CI vector\b')
         rx_end = re.compile('TOTAL ENERGIES|Energy: ')
-        rx_data = re.compile('(\s+[20ab]+)+(\s+[-]?\d\.\d+)+')
-        rx_occ = re.compile('([20ab]+\s+)+')
-        rx_float = re.compile('[-]?\d+\.\d+')
-        rx_block = re.compile('State:(\s+\d+)+')
+        rx_data = re.compile(r'(\s+[20ab]+)+(\s+[-]?\d\.\d+)+')
+        rx_occ = re.compile(r'([20ab]+\s+)+')
+        rx_float = re.compile(r'[-]?\d+\.\d+')
+        rx_block = re.compile(r'State:(\s+\d+)+')
         indata = False
         civec = []  # list of DataFrames; index specifies state
         # new 2021 format does not list group numbers--assume they are in order
@@ -605,6 +605,7 @@ class MRCI:
         self.configs = self.config_coeffs(header=True)
         self.record = self.record_number()
         self.spaces()
+        self.parameters = mrci_parameters(linebuf)
     def printlines(self):
         print('\n'.join(self.lines))
     def record_number(self):
@@ -652,7 +653,7 @@ class MRCI:
         self.orbs_external = orbs_external
         return
     def basics(self):
-        # get irrep, spin and electron counts
+        # get irrep, spin and number of core (frozen) orbitals
         rx_sym = re.compile(r' Reference symmetry:\s+(\d)\s+(\w+)')
         rx_ncore = re.compile(r' Number of core orbitals:\s+(\d+)')
         #rx_nact = re.compile(r' Number of active\s+orbitals:\s+(\d+)')
@@ -786,7 +787,7 @@ class MRCI:
                 #print(line.rstrip())
                 #print(f'>>>changing reflabel from {reflbl}', end='')
                 k = int(words[-1]) - 1
-                reflbl = re.sub('\d+\.', ireflist[k] + '.', reflbl)
+                reflbl = re.sub(r'\d+\.', ireflist[k] + '.', reflbl)
                 #print(f' to {reflbl}')
                 iref[-1] = k
                 #print('>>>iref[] =', iref)
@@ -2538,9 +2539,9 @@ def parse_SOCI_full_dipole_matrix(fpro, dimen, ascomplex=False, aslist=True):
     'dimen' is the size of the matrix, i.e., the number of spin-orbit states
     The defaults are best for dumping to YAML
     '''
-    re_start = re.compile(' Property matrices transformed in SO basis \(not sym. adapted\)')
+    re_start = re.compile(r' Property matrices transformed in SO basis \(not sym. adapted\)')
     re_block = re.compile(r' DM([XYZ]) \(TRANSFORMED, (REAL|IMAG)\)')
-    re_blank = re.compile('^\s*$')
+    re_blank = re.compile(r'^\s*$')
     re_hdr = re.compile(r'(\s+\d+)+\s*$')
     re_data = re.compile(r'\s*\d+(\s+[-]?\d+\.\d+)+\s*$')
     started = inblock = False
@@ -3115,7 +3116,7 @@ class fullmatSOCI_old:
 ##
 def molpro_version(fpro):
     # read output file; return a string describing the version of Molpro
-    rx = re.compile('^\s+Version (.*) linked')
+    rx = re.compile(r'^\s+Version (.*) linked')
     vers = 'unknown'
     with open(fpro) as F:
         for line in F:
@@ -3128,7 +3129,7 @@ def read_hlsdiag(fpro, nci):
     # return array with values of HLSDIAG (for SO-CI)
     hlsdiag = np.zeros(nci) + np.nan
     #rx_hls = re.compile('\s*SETTING HLSDIAG\((\d+)\)\s+=\s+([-]\d+\.\d+)')
-    rx_hls = re.compile('\s*SETTING HLSDIAG\((\d+)\)\s+=\s+')
+    rx_hls = re.compile(r'\s*SETTING HLSDIAG\((\d+)\)\s+=\s+')
     with open(fpro) as F:
         for line in F:
             m = rx_hls.match(line)
@@ -3340,7 +3341,7 @@ def read_coordinates(fname, linenum=False):
     # Include "CHARGE" in the DF
     rx_coord = re.compile('ATOMIC COORDINATES')
     rx_data = re.compile(r'^\s*\d+\s+[A-Z]+\s+\d+\.\d\d\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+\s+[-]?\d+\.\d+')
-    rx_blank = re.compile('^\s*$')
+    rx_blank = re.compile(r'^\s*$')
     dflist = []
     lineno = []
     cols = ['Z', 'x', 'y', 'z', 'q']  # keep Zxyz as first four 
@@ -3372,7 +3373,7 @@ def read_coordinates(fname, linenum=False):
             return dflist
 ##
 def read_compgroup(fpro):
-    regex = re.compile(' Point group\s+\S+')
+    regex = re.compile(r' Point group\s+\S+')
     # return the first match
     # This is the computational point group;
     #   the actual molecular point group may be higher
@@ -3435,7 +3436,7 @@ def read_harmonic_freqs(fname):
                 m = re_irreps.match(line)
                 if m:
                     for i, w in enumerate(words):
-                        if re.match('\d+', w):
+                        if re.match(r'\d+', w):
                             # plain number
                             modenums.append(int(w))
                         else:
@@ -3501,6 +3502,27 @@ def relabel_CAS_by_energy(casdf):
         for k, i in enumerate(gdf.index):
             tdf.at[i, 'Label'] = '{:d}.{:d}'.format(k+1, irrep)
     return tdf
+##
+def mrci_parameters(linebuf):
+    # Given relevant lines, as from mrci_sections()['top'][0],
+    # return a dict of the "Program parameters" in the MRCI
+    re_start = re.compile(r' Program parameters: ')
+    re_blank = re.compile(r'^\s*$')
+    re_parm = re.compile(r'\s+([A-Z_\d]+\s*=\s*[-]?\d+)')
+
+    retval = {}  # key = parameter name
+    inparm = False
+    for line in linebuf:
+        if re_start.match(line):
+            inparm = True
+        if re_blank.match(line):
+            inparm = False
+        if inparm:
+            m = re_parm.findall(line)
+            for w in m:
+                [k, v] = w.split('=')
+                retval[k.strip()] = int(v.strip())
+    return retval
 ##
 def readMRCI(fname, linenum=False):
     # return a list of MRCI objects
@@ -3806,9 +3828,9 @@ def readSOprops(fname, linenum=False):
     retval = []  # list of DataFrames, one for each SO-CI
     lineno = []
     re_start = re.compile(' Property matrices transformed in SO basis')
-    re_end = re.compile(' \*{25}')
+    re_end = re.compile(r' \*{25}')
     re_eltype = re.compile(r'<i\|DM([XYZ])\|([i1])>')  # type of element
-    re_dipnr = re.compile(' STATE:(\s+\d+)+')
+    re_dipnr = re.compile(r' STATE:(\s+\d+)+')
     re_dip = re.compile(r' VALUE: (\s+[-]?\d+\.\d+)+')
     re_real = re.compile(r' REAL PART  \(a\.u\.\):(\s+[-]?\d+\.\d+)+')
     re_imag = re.compile(r' IMAG PART  \(a\.u\.\):(\s+[-]?\d+\.\d+)+')
@@ -3935,7 +3957,7 @@ def readSOprops_alt(fname):
     #   for even-electron system like PtH- anion
     # Intended for a single geometry
     re_start = re.compile(r'element[s]? <i\|DM')
-    re_end = re.compile('\*{25}')
+    re_end = re.compile(r'\*{25}')
     re_eltype = re.compile(r'<i\|DM([XYZ])\|\s*([i1])>')
     re_nr = re.compile(r'(\s+\d+)+$')
     re_data = re.compile(r'(\s+[-]?\d+\.\d+)+$')
@@ -4221,9 +4243,9 @@ def read_SOmat_SymmBlocks(fname):
     # also a list of line numbers that start each block
     # this differs from readSOmatrixBlocks() by reading 
     #    individual irrep sections, instead of the whole matrix
-    rx_sosym = re.compile('\s+Spin-orbit calculation in the basis of symmetry adapted wave functions')
+    rx_sosym = re.compile(r'\s+Spin-orbit calculation in the basis of symmetry adapted wave functions')
     rx_irrep = re.compile(r'\s+Results for symmetry\s+(\d)')
-    rx_end = re.compile('\s+Summary of SO results')
+    rx_end = re.compile(r'\s+Summary of SO results')
     retval = []
     lineno = []
     with open(fname, 'r', errors='replace') as F:
@@ -4266,9 +4288,9 @@ def parse_SOmat_SymmBlock(sobuf):
     e0 = irrep = dimen = 0
     cols = []  # numerical column headings, decremented by 1
     sobas = []
-    rx_irr = re.compile('\s+Results for symmetry\s+(\d)')
+    rx_irr = re.compile(r'\s+Results for symmetry\s+(\d)')
     rx_mat = re.compile(r'\s+=> Spin-Orbit Matrixblock \(CM-1\)  \(dimension:\s+(\d+)\)')
-    rx_e0 = re.compile('\s+The diagonal matrixelements are shifted by\s+(-\d+\.\d+)')
+    rx_e0 = re.compile(r'\s+The diagonal matrixelements are shifted by\s+(-\d+\.\d+)')
     rx_eig = re.compile(r'\s+=> Eigenvalues of spin-orbit matrix in ascending order')
     rx_invec = re.compile(r'\s+=> Eigenvectors of spin-orbit matrix columnwise and ')
     rx_val = re.compile(r'\s+(\d+)\s+(-\d+\.\d+)(\s+[-]?\d+\.\d+){5}')
@@ -4541,7 +4563,7 @@ def get_SOeigs(SOmatrix):
 ##
 def applied_field(fname):
     # return the applied electric field vector (atomic units)
-    rx_field = re.compile(' Field strength:(\s+[-]?\d+\.\d+){3}')
+    rx_field = re.compile(r' Field strength:(\s+[-]?\d+\.\d+){3}')
     field = np.zeros(3)
     with open(fname, 'r', errors='replace') as F:
         for line in F:
@@ -4746,9 +4768,9 @@ def readTable(fname, title):
     # return a DataFrame of the contents of a MOLPRO table
     # table must have a title (2nd argument here)
     # the 'title' should be the complete title and work inside a regular expression
-    rx_title = re.compile('^\s*{:s}\s*$'.format(title))
+    rx_title = re.compile(r'^\s*{:s}\s*$'.format(title))
     rx_blank = re.compile(r'^\s*$')
-    in_tbl = Ffalse
+    in_tbl = False
     buf = []
     with open(fname, 'r', errors='replace') as F:
         for line in F:
@@ -5211,7 +5233,7 @@ def SO_assign_omega(mrci, SObasis, soci, vecsq, csq_thresh=0.0001, silent=False,
     #
     # strip any unnecessary '(1)' specifiers from MRCI term labels
     just_one = set()
-    rx = re.compile('\((\d+)\)(\S+)')
+    rx = re.compile(r'\((\d+)\)(\S+)')
     for t in parenterm:
         m = rx.match(t)
         if m:
@@ -5600,8 +5622,8 @@ def stoichiometry(fpro, ones=False, charge=True):
 def nbfn(fpro, prim=False):
     # number of 1e basis functions (first number found in file)
     # if prim==True, return (#cGTO, #pCTO)
-    rx_c = re.compile('^\s*NUMBER OF CONTRACTIONS:\s+(\d+)')
-    rx_p = re.compile('^\s*NUMBER OF PRIMITIVE AOS:\s+(\d+)')
+    rx_c = re.compile(r'^\s*NUMBER OF CONTRACTIONS:\s+(\d+)')
+    rx_p = re.compile(r'^\s*NUMBER OF PRIMITIVE AOS:\s+(\d+)')
     with open(fpro) as F:
         for line in F:
             m = rx_c.match(line)
@@ -5621,7 +5643,7 @@ def final_occup_vector(fname, omit_empty=False):
     #   rows=spin
     # For the last set of converged ROHF orbitals 
     # 'omit_empty' will delete any irreps without occupieds
-    rex = re.compile('\s*Final( alpha | beta  | )occupancy:')
+    rex = re.compile(r'\s*Final( alpha | beta  | )occupancy:')
     # get the irrep labels corresponding to their ordering
     re_ir = re.compile(r'\d+(\S+)')
     occd = {}  # key = spin, value = list of occup numbers by irrep
