@@ -65,7 +65,8 @@ LAMBDA = ['Sigma', 'Pi', 'Delta', 'Phi', 'Gamma', 'Eta'] # linear molecule
 LSYMB = ['S', 'P', 'D', 'F', 'G', 'H', 'I', 'K', 'L', 'M']  # atomic
 
 SPINMULT = {0: 'Singlet', 0.5: 'Doublet', 1: 'Triplet', 1.5: 'Quartet', 
-            2: 'Quintet', 2.5: 'Sextet', 3: 'Septet', 3.5: 'Octet'}
+            2: 'Quintet', 2.5: 'Sextet', 3: 'Septet', 3.5: 'Octet', 
+            4: 'Nonet', 4.5: 'Decet'}
 MULTSPIN = {v: k for k, v in SPINMULT.items()}
 SPINLABEL = {int(2*k+1): v for k, v in SPINMULT.items()}
 LABELSPIN = {v: k for k, v in SPINLABEL.items()}
@@ -120,6 +121,7 @@ def isotopic_mass(atlabel):
               35: {79: 78.9183376, 81: 80.9162897},
               53: {127: 126.9044719},
               78: {190: 189.9599297, 192: 191.9610387, 194: 193.9626809, 195: 194.9647917, 196: 195.96495209, 198: 197.9678949},
+              82: {204: 203.9730435, 206: 205.9744652, 207: 206.9758968, 208: 207.9766520}
              }
     try:
         m = mtable[Z][n]
@@ -8931,5 +8933,21 @@ def weight_Counter(wts, lbls, normsum=None, nround=None):
     if nround is not None:
         for lbl in retval.keys():
             retval[lbl] = np.round(retval[lbl], nround)
+    return retval
+##
+def dict_subtract(d1, d2, delzero=False, ndig=None):
+    # Given dicts with numerical values, return a 
+    #   dict b[k] = d2[k] - d1[k]
+    # If 'delzero', then remove keys with zero values
+    # If 'ndig' is not None, then round values to that many decimal digits
+    keys = set(d1.keys())
+    keys.update(d2.keys())
+    retval = {}
+    for k in keys:
+        v = d2.get(k, 0) - d1.get(k, 0)
+        if ndig is not None:
+            v = np.round(v, ndig)
+        if (v != 0) or (not delzero):
+            retval[k] = v
     return retval
 ##
