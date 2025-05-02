@@ -5906,12 +5906,14 @@ def parabmin(X, Y, params=False):
     else:
         return xmin, ymin
 ##
-def polymin(X, Y, order=4, real=True):
+def polymin(inX, inY, order=4, real=True):
     # Given (energy) points (e.g., from lowest_points(x,y,5)), 
     #   fit to an 'order'-order polynomial, then
     # find the minimum point(s) of the fitted polynomial. 
     # Return (xmin, ymin) at the minimum(s).
     #   Limit to real-valued xmin if 'real'==True.
+    X = np.array(inX)
+    Y = np.array(inY)
     nppoly = np.polynomial.polynomial
     fit_poly = nppoly.Polynomial.fit(X, Y, order)
     deriv = fit_poly.deriv()
@@ -6513,7 +6515,7 @@ def fit_diatomic_potential(R, V, method='cubic', transf=None, wt=None,
     '''
     Given potential energy data points V(R), return a fitting function
     'method' can be: 
-        'akima', 'cubic', 'quadratic', 'linear', 'quartic', or 'quintic' to do a spline
+        'akima', 'cubic', 'quadratic', 'linear', or 'quintic' to do a spline
          an integer > 0 for a polynomial
     'transf' specifies a transformation of R prior to fitting: 
         None: no transformation
@@ -8950,4 +8952,20 @@ def dict_subtract(d1, d2, delzero=False, ndig=None):
         if (v != 0) or (not delzero):
             retval[k] = v
     return retval
+##
+def read_pandas_from_excel(fname, header=None):
+    # read data from CSV or Excel file
+    # return the name of the sheet (selected by user)
+    #   and a pandas DataFrame of the data
+    froot = os.path.split(fname)[-1]
+    if 'xlsx' in fname:
+        xl = pd.ExcelFile(fname)
+        if len(xl.sheet_names) > 1:
+            print('Available worksheets:', xl.sheet_names)
+            sheet = input('\tchoose a worksheet: ')
+        else:
+            sheet = xl.sheet_names[0]
+        print(f'Reading worksheet "{sheet}" from Excel file {froot}')
+        df = xl.parse(sheet, header=header)
+    return sheet, df
 ##
