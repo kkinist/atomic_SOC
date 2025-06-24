@@ -1587,6 +1587,7 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
     #   collect them into terms and return a DataFrame
     # 'cols' are columns that must be identical to thresholds 'thr'
     # Other columns are returned as list of component values
+    # First column should be energy
     # This version can detect non-adjacent pairs
     
     data = {'index': []}   # indices into dfraw
@@ -1596,8 +1597,9 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
     for i, th in enumerate(thr):
         if th != 0:
             excols.remove(cols[i])
-    # then sort by energy 'E'
-    excols.append('E')
+    # then sort by energy
+    Ecol = cols[0]
+    excols.append(Ecol)
     dfsort = dfraw.sort_values(excols).copy().reset_index(drop=False)
     nrow = len(dfsort)
     included = []  # list of row numbers
@@ -1615,7 +1617,7 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
                 if tol:
                     spr = abs(x2 - x1)
                     match = match and (spr <= tol)
-                    if col == 'E':
+                    if col == Ecol:
                         Espr = spr
                 else:
                     # tol = 0 means that items must be exactly equal
@@ -2373,4 +2375,74 @@ def uncrowd_energies(line):
     re_collide = re.compile(r'(\d)[-](\d+\.)')
     retval = re_collide.sub(r'\1 -\2', line)
     return retval
+##
+def build_MRCIs_DF(mrci_seclist, ncas):
+    label = []   # state label like "2.3"
+    c0 = []
+    edav = []
+    spinmult = []
+    eci = []
+    edav = []  # "rotated" is available, else "relaxed"
+    eref = []  # final reference energy
+    ref0 = []  # initial reference energy
+    dipz = []
+    cigroup = []  # which MRCI calculation (ordinal)
+    irrep = []
+    saverec = []
+    for igroup, sec in enumerate(mrci_seclist):
+        print(f'MRCI #{igroup:<2d}  : ', end='')
+        mrcisec = mrci_sections(sec)
+        mrci_meta = mrci_info(mrcisec['top'][0])
+        irr = mrci_meta['irrep']
+        mrci_iter = mrci_iterations(mrcisec['iterations'][0])  # includes 'init_ref' from CASSCF
+        if mrci_iter['iterations'] is None:
+            print(' Null calculation (noexc)')
+            continue
+        mrci_res = mrci_results(mrcisec['results'][0])
+        nstates = mrci_meta['nstates']
+        smult = mrci_meta['smult']
+        reco = mrci_iter['saverec']
+        print(f'  {nstates} states   irrep={irr}   {smult}, {reco}')
+        if nstates > 1:
+            vers = 'rotated'
+        else:
+            vers = 'relaxed'
+        ini_ref = [v for v in mrci_iter['init_ref'].values()]  # relies upon dict order
+        if len(mrci_res['coefxmat']) > 0:
+            iref0 = np.argmax(abs(mrci_res['coefxmat']), axis=1)  # maximum overlaps
+            if len(set(iref0)) < len(iref0):
+                print('*** duplicated reference state ***')
+                print(iref0)
+                print(mrci_res['coefxmat'])
+            for i in range(nstates):
+                ref0.append(ini_ref[iref0[i]])
+        else:
+            for i in range(nstates):
+                ref0.append(ini_ref[i])
+        for lbl, cires in mrci_res['state'].items():
+            # individual state
+            cigroup.append(igroup)
+            label.append(lbl)
+            irrep.append(irr)
+            c0.append(cires['C0'][vers])
+            spinmult.append(smult)
+            saverec.append(reco)
+            nrg = cires['Energy']
+            eci.append(nrg['total'])
+            edav.append(nrg['davidson'][vers])
+            eref.append(nrg['ref E'])
+            dipz.append(cires['Dipole'][2])
+    spin = [chem.MULTSPIN[sm] for sm in spinmult]
+    data = {'spinM': spinmult, 'S': spin, 'Label': label, 'cigroup': cigroup,
+            'E': eci, 'Edav': edav, 'Eref': eref, 'ref0': ref0, 'C0': c0,
+            'dipZ': dipz, 'irrep': irrep, 'saverec': saverec}
+    dfmrci = pd.DataFrame(data)
+    nmrci = len(dfmrci)
+    if nmrci != ncas:
+        print(f'**** There are {ncas} CASSCF states but {nmrci} MRCI states ****')
+        nstate = None
+    else:
+        nstate = ncas
+    dfmrci['refchange'] = np.round(dfmrci.Eref - dfmrci.ref0, 6)
+    return dfmrci, nstate
 ##
