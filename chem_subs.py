@@ -5054,7 +5054,8 @@ def readXmol(fh, units='angstrom', handle=False):
         pass
     natom = int( fh.readline() )
     comment = fh.readline().rstrip()
-    df = pd.read_csv(fh, names=['El', 'X', 'Y', 'Z'], delim_whitespace=True)
+    #df = pd.read_csv(fh, names=['El', 'X', 'Y', 'Z'], delim_whitespace=True)
+    df = pd.read_csv(fh, names=['El', 'X', 'Y', 'Z'], sep=r'\s+')
     # check the number of atoms
     if natom != df.shape[0]:
         print('Expected {:d} atoms but found {:d}!'.format(natom, df.shape[0]))
@@ -6034,7 +6035,7 @@ def diatomic_spectr(R, V, mass, omega=0, psitol=1.e-6, silent=False, nfgh=51, pa
     we and wexe are determined from v=0,1,2 only
     '''
     if omega != 0:
-        print_err('', 'Omega not zero--results may be meaningless', halt=False)    
+        print_err('', 'Omega not zero', halt=False)    
     if not silent:
         print('Wavefunction tail convergence criterion = {:.1e}'.format(psitol))
     constants = {}
@@ -6042,48 +6043,8 @@ def diatomic_spectr(R, V, mass, omega=0, psitol=1.e-6, silent=False, nfgh=51, pa
     EvJ, Emin, Re = rovib_levels(R, V, mass, omega, vmax=2, Nmax=2, 
             ref=ref, psitol=psitol, nfgh=nfgh, padwidth=padwidth, 
             interp=interp, silent=silent)
-    '''
-    fitorder = 4
-    (xlow, ylow) = lowest_points(R, V, fitorder+1)
-    if callable(V):
-        # find the minimum by continuous means
-        res = optimize.minimize_scalar(V, method='bounded', bounds=[xlow[0], xlow[-1]])
-        Re = res.x
-        Emin = res.fun
-    else:
-        # equilibrium distance from quartic fit to lowest five points
-        (xmin, ymin) = polymin(xlow, ylow, order=fitorder)
-        if len(ymin) > 1:
-            print_err('', 'potential has more than one minimum')
-        Re = xmin[0]
-        Emin = ymin[0]
-    '''
     constants['Re'] = Re * BOHR  # convert to Angstrom
     constants['Emin'] = Emin
-    '''
-    # make energies relative to minimum
-    if callable(V):
-        Vrel = lambda r : V(r) - Emin
-    else:
-        Vrel = V - Emin
-    # compute low-lying levels E(v, J)
-    EvJ = np.zeros((3, 3))
-    for Nrot in range(3):
-        J = Nrot + omega
-        if callable(Vrel):
-            centrifug = lambda r : Vrel(r) + (J*(J+1)-omega*omega)/(2*mass*r*r)
-        else:
-            centrifug = Vrel + (J*(J+1)-omega*omega)/(2*mass*R*R)
-        cvals, cvecs, ratio, xwfn, ywfn = FGH(R, centrifug, mass, silent=silent,
-                                  npt=nfgh, padwidth=padwidth, interp=interp)
-        if np.any(ratio[:3] > psitol):
-            # wavefunction is not good enough for lowest 3 states
-            print(ratio[:3])
-            print_err('', 'sloppy wfn for J = {:d}'.format(J))
-        EvJ[:,Nrot] = cvals[:3]
-    # convert energy levels to cm**-1
-    EvJ *= AU2CM
-    '''
     # vibrational levels
     constants['w0'] = EvJ[1,0] - EvJ[0,0]
     constants['E0'] = EvJ[0,0]
@@ -6609,7 +6570,8 @@ def guided_fitting(xguide, yguide, xsparse, ysparse, method='cubic',
         fguide = fit_diatomic_potential(xg, yg, method=gmethod, transf=transf)
     ydiff = ycoarse - fguide(xcoarse)
     # fit the differences between the sparse and guiding potentials
-    # ffit() is for R <= Rmax and ffitex() is for R > Rmax
+    # ffit() is for Rmin <= R <= Rmax, ffitex() is for R > Rmax, and
+    #   ffitexlo() is for R < Rmin
     #   add fguide(R) to either to get the guided potential
     ffit = fit_diatomic_potential(xcoarse, ydiff, wt=wt, method=method, 
                                   transf=transf, residuals=residuals)
@@ -6618,25 +6580,35 @@ def guided_fitting(xguide, yguide, xsparse, ysparse, method='cubic',
     if xord > 0:
         ffitex = fit_diatomic_potential(xcoarse[-xord-1:], ydiff[-xord-1:], 
                     method=xord, transf=transf, residuals=False)
+        ffitexlo = fit_diatomic_potential(xcoarse[:xord+1], ydiff[:xord+1], 
+                    method=xord, transf=transf, residuals=False)
     else:
         # just a constant for xord=0
         ffitex = lambda x: ydiff[-1]
+        ffitexlo = lambda x: ydiff[0]
     def fguided(x):
         ulim = xcoarse.max()
+        llim = xcoarse.min()
         if np.ndim(x) == 0:
             # x is scalar
             if x > ulim:
                 yfit = ffitex(x)  # extrapolate to large R
+            elif x < llim:
+                yfit = ffitexlo(x)  # extrapolate to small R
             else:
-                yfit = ffit(x)  # this could extrapolate to small R
+                yfit = ffit(x)
         else:
             # x is list, etc.
             xa = np.array(x)
             yfit = ffit(xa)     # without extrapolation
             idx = np.where(xa > ulim)[0]  # indices of x > Rmax
             if len(idx):
-                # use some extrapolation
+                # use some extrapolation to larger R
                 yfit[idx] = ffitex(xa[idx])
+            idx = np.where(xa < llim)[0]  # indices of x > Rmax
+            if len(idx):
+                # use some extrapolation to smaller R
+                yfit[idx] = ffitexlo(xa[idx])
         y = yfit + fguide(x)
         return y
     if plot:
@@ -8723,9 +8695,12 @@ def merge_dicts(old, new, path=None, silent=False):
             old[key] = new[key]
     return old
 ##
-def term_from_Latin(lbl):
+def term_from_Latin(lbl, reverse=False):
     # convert term label from Latin alphabet to Greek equivalent
+    #   or the reverse
     mapping = {'S': SIGMA, 'P': PPI, 'D': DELTA, 'F': PHI, 'G': GAMMA}
+    if reverse:
+        mapping = {v: k for k, v in mapping.items()}
     grk = ''
     for letter in lbl:
         try:
@@ -8953,19 +8928,48 @@ def dict_subtract(d1, d2, delzero=False, ndig=None):
             retval[k] = v
     return retval
 ##
-def read_pandas_from_excel(fname, header=None):
+def read_pandas_from_excel(fname, header=None, sheet=None):
     # read data from CSV or Excel file
     # return the name of the sheet (selected by user)
     #   and a pandas DataFrame of the data
+    # choose header=0 if the first row is headers
     froot = os.path.split(fname)[-1]
     if 'xlsx' in fname:
         xl = pd.ExcelFile(fname)
-        if len(xl.sheet_names) > 1:
-            print('Available worksheets:', xl.sheet_names)
-            sheet = input('\tchoose a worksheet: ')
-        else:
-            sheet = xl.sheet_names[0]
+        if sheet is None:
+            # get sheet name interactively or choose the only one
+            if len(xl.sheet_names) > 1:
+                print('Available worksheets:', xl.sheet_names)
+                sheet = input('\tchoose a worksheet: ')
+            else:
+                sheet = xl.sheet_names[0]
         print(f'Reading worksheet "{sheet}" from Excel file {froot}')
         df = xl.parse(sheet, header=header)
     return sheet, df
+##
+def without_nan(arraylist):
+    # Given a list of matching numpy arrays, return new arrays that are shortened as required to 
+    #   eliminate all Nan values
+    n = None  # all arrays should have same length
+    for a in arraylist:
+        if n is None:
+            n = len(a)
+        else:
+            if n != len(a):
+                print(f'*** Arrays in list must be of equal length: {len(a)} != {n}')
+                return None
+    for i, a in enumerate(arraylist):
+        if i == 0:
+            na = a.isna()
+        else:
+            # accumulate
+            na = na | a.isna()
+    newlist = []
+    if sum(na) > 0:
+        print(f'Deleted {sum(na)} data in function without_nan()')
+    na = ~na
+    for a in arraylist:
+        b = a[na].copy()
+        newlist.append(b)
+    return newlist
 ##
