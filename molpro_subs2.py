@@ -1704,7 +1704,7 @@ def collect_atomic_terms(dfcas, Ecol):
                 irrl.append(subdf.iloc[0]['irrep'])
                 Sl.append(S)
                 Ll.append(L)
-                s = subdf[Ecol].values.ptp()
+                s = np.ptp(subdf[Ecol].values)
                 spread.append(s)
     if orphans:
         return None
@@ -1757,7 +1757,7 @@ def spreads_ETC(df):
     if len(df) < 1:
         # ptp() will give ValueError
         return None, None, None
-    spr = df.Erel.values.ptp()
+    spr = np.ptp(df.Erel.values)
     a = np.array([b for b in df.term_comp.values])
     cspr = np.ptp(a, axis=0)
     maxcspr = cspr.max()
