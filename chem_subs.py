@@ -8973,3 +8973,37 @@ def without_nan(arraylist):
         newlist.append(b)
     return newlist
 ##
+def get_gamma(mu, sigma, nsample):
+    #   (copied from stats_subs.py)
+    # Gamma distribution given mean and standard deviation
+    theta = sigma * sigma / mu
+    k = mu / theta
+    return np.random.gamma(k, theta, nsample)
+##
+def get_beta(mu, sigma, nsample, parms=False):
+    #   (copied from stats_subs.py)
+    # Beta distribution with specified mean and standard deviation
+    # if parms==True, also return values of shape parameters
+    var = sigma * sigma
+    nu = mu * (1-mu) / var
+    nu -= 1
+    a = mu * nu
+    b = (1-mu) * nu
+    # both parameters must be positive
+    if a <= 0:
+        print('Error in get_beta: a =', a, 'is less than zero')
+        if parms:
+            return None, a, b
+        else:
+            return None
+    if b <= 0:
+        print('Error in get_beta: b =', b, 'is less than zero')
+        if parms:
+            return None, a, b
+        else:
+            return None
+    if parms:
+        return np.random.beta(a, b, nsample), a, b
+    else:
+        return np.random.beta(a, b, nsample)
+##
