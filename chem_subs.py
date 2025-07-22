@@ -6272,7 +6272,6 @@ def diatomic_Dunham(R, V, mass, omega=0, vmax=2, Nmax=2, psitol=1.e-6,
         range 3x wider. 
     'V' may be a callable function instead of a list/array
     Get constants by fitting energy levels, not from Dunham's equations
-    If 'dataframe', return a DataFrame instead of an array
     '''
     #if omega != 0:
     #    print_err('', 'Omega not zero--results may be meaningless', halt=False)
@@ -8354,7 +8353,7 @@ def read_NIST_AEL_csv(file, simple_config=False, bare_term=False,
     
     return df
 ##
-def rot_consts_PtH_fitting(Jvec, Evec, omega, nrot=4):
+def rot_consts_PtH_fitting(Jvec, Evec, omega, nrot=4, silent=False):
     # fit (J, E) data to eq (1) in McCarthy et al. (1993),
     #   without the delta-G(1/2) or the parity
     #   (i.e., my eq. (2) in the PtH spectroscopy paper)
@@ -8421,11 +8420,12 @@ def rot_consts_PtH_fitting(Jvec, Evec, omega, nrot=4):
     #print('Initially optim Pvec =', Pvec)
     result = optimize.minimize(resid, Pvec, args=(xvec, evec),
                               method='Nelder-Mead')
-    if result.success:
-        print_results(result, Pvec)
-    else:
-        print(result)
-        print_results(result, Pvec)
+    if not silent:
+        if result.success:
+            print_results(result, Pvec)
+        else:
+            print(result)
+            print_results(result, Pvec)
     return result
 ##
 def rot_consts_PtH_compute_levels(xvec, pvec, Jmax=False, omega=None):
@@ -8506,7 +8506,7 @@ def find_degenerate(vals, tol, chain=True):
     #   each list is degenerate to within 'tol'
     # If 'chain', then a denerate group may extend farther than 'tol'
     idxl = []  # list of lists to return
-    used = []  # values already considered
+    #used = []  # values already considered
     idx = np.argsort(vals)
     vprev = vfloor = -np.inf
     grp = []
@@ -9006,4 +9006,80 @@ def get_beta(mu, sigma, nsample, parms=False):
         return np.random.beta(a, b, nsample), a, b
     else:
         return np.random.beta(a, b, nsample)
+##
+def diatomic_const_fmt(clist=[]):
+    # Return a dict of format strings, suitable for pandas Styler
+    #   longer strings first, to make matching work using only "in" operator
+    fmt = {c: '{:.2e}' for c in ['beta_e', 'gamma_e', 'De', 'Dv', 'Hv']}
+    fmt['alpha_e'] = '{:.5f}'
+    fmt.update({c: '{:.4f}' for c in ['weye', 'Be', 'Bv']})
+    fmt['wexe'] = '{:.2f}'
+    fmt.update({c: '{:.1f}' for c in ['we', 'Te', 'Tv']})
+    # add any specials
+    cfmt = {}
+    for cnew in clist:
+        for c, f in fmt.items():
+            if c in cnew:
+                cfmt[cnew] = f
+    fmt.update(cfmt)
+    return fmt
+##
+def fit_bivariate_poly(XY, Z, n, m, A0=None, resids=False, func=False):
+    '''
+    Given 2D array of (x,y) pairs, do least-squares fit to
+      Z = A_ij * (x ** i) * (y ** j)
+      for i in [0, n] and j in [0, m]
+      Optional A0 is initial guess for coefficients
+    Return the coefficients 
+      if 'func', also return the fitted function
+      if 'resids', also return the (signed) residuals (f-Z)
+    '''
+    if A0 is None:
+        A = np.zeros((n+1, m+1))
+    else:
+        A = A0
+    # check dimensions
+    if XY.shape[1] != 2:
+        print(f'*** XY array has width = {XY.shape[1]} but must be 2 ***')
+        return
+    npt = XY.shape[0]
+    if npt != len(Z):
+        print(f'*** XY array length = {XY.shape[0]} but len(Z) = {len(Z)} ***')
+        return
+    if A.shape != (n+1, m+1):
+        print(f'*** Coefficents shape(A) = {A.shape} but should be [{n+1}, {m+1}] ***')
+        return
+    # Separate X and Y
+    X = XY[:, 0]
+    Y = XY[:, 1]
+    # For scipy.optimize, I need a 1D version of A
+    Aflat = A.flatten()
+    def resid(Aflat, n, m):
+        A = Aflat.reshape((n+1, m+1))
+        zfit = 0.
+        for i in range(n+1):
+            for j in range(m+1):
+                zfit = zfit + A[i, j] * (X ** i) * (Y ** j)
+        return (zfit - Z)
+    # Do the minimization
+    result = optimize.least_squares(resid, Aflat, args=(n, m))
+    if not result.success:
+        print('*** minimization failed ***')
+    if not (func or resids):
+        return result.x.reshape((n+1, m+1))
+    # something extra is requested
+    if not func:
+        # only residuals
+        return result.x.reshape((n+1, m+1)), result.fun
+    # everything
+    A = result.x.reshape((n+1, m+1))
+    def fpoly(xy):
+        x = xy[:, 0]
+        y = xy[:, 1]
+        z = 0.
+        for i in range(n+1):
+            for j in range(m+1):
+                z = z + A[i, j] * (x ** i) * (y ** j)
+        return z
+    return result.x.reshape((n+1, m+1)), result.fun, fpoly
 ##
