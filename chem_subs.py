@@ -1542,19 +1542,19 @@ def ensure_file_handle(fF):
 ##
 def find_line_number(file, search_string, case=True, linelist=False):
     # return a list of line numbers for lines that include the search string
+    #   regex is ok, too
     F = ensure_file_handle(file)
     lineno = []
     lines = []  # list of matching lines
+    if case:
+        re_ln = re.compile(search_string)
+    else:
+        # case-insensitive
+        re_ln = re.compile(search_string, re.IGNORECASE)
     for i, line in enumerate(F):
-        if case:
-            if search_string in line:
-                lineno.append(i)
-                lines.append(line)
-        else:
-            # case-insensitive when case == False
-            if search_string.lower() in line.lower():
-                lineno.append(i)
-                lines.append(line)
+        if re_ln.search(line):
+            lineno.append(i)
+            lines.append(line)
     if linelist:
         return lineno, lines
     else:
@@ -6070,7 +6070,7 @@ def diatomic_spectr(R, V, mass, omega=0, psitol=1.e-6, silent=False, nfgh=51, pa
     return constants
 ##
 def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
-                 psitol=1.e-6, silent=False, nfgh=51, padwidth=0, interp='cubic',
+                 psitol=1.e-6, silent=False, nfgh=501, padwidth=0, interp='cubic',
                  vectors=False, persist=False):
     '''
     Given a potential, return some diatomic rovibrational energies
@@ -6437,6 +6437,15 @@ def Morse_potential(R, De, beta, Re):
     a = -beta * (R - Re)
     x = (1 - np.exp(a)) ** 2
     return De * x
+##
+def Morse_function(De, beta, Re):
+    # Return a callable function
+    def fM(R):
+        a = -beta * (R - Re)
+        x = (1 - np.exp(a)) ** 2
+        E = De * x
+        return E
+    return fM
 ##
 def fit_Morse(R, V):
     # given arrays/lists of distances and energies, return fitted Morse 
@@ -8877,6 +8886,18 @@ def sort_dict_by_value(d, reverse=False, lists=False):
     else:
         return retval
 ##
+def dict_key_closest(d, vtarget):
+    # Given a dict "d" and numerical target value "vtarget",
+    # return the key whose value is closest to the target
+    mindif = np.inf
+    kmin = None
+    for k, v in d.items():
+        dif = abs(v - vtarget)
+        if dif < mindif:
+            mindif = dif
+            kmin = k
+    return kmin
+##
 def is_unitary(arr2d):
     # Return whether the array is unitary
     sh = arr2d.shape
@@ -9048,7 +9069,8 @@ def fit_bivariate_poly(XY, Z, n, m, A0=None, resids=False, func=False):
         return
     if A.shape != (n+1, m+1):
         print(f'*** Coefficents shape(A) = {A.shape} but should be [{n+1}, {m+1}] ***')
-        return
+        # Start from null guess
+        A = np.zeros((n+1, m+1))
     # Separate X and Y
     X = XY[:, 0]
     Y = XY[:, 1]
