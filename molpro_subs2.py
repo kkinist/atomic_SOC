@@ -1662,8 +1662,9 @@ def pair_lambdas(dfraw, cols=['E', 'dipZ', 'Lz', 'spinM', 'S'],
             included.append(irow)
     df = pd.DataFrame(data)
     scm = maxEspr * chem.AU2CM
+    scm = np.round(scm, 1)
     if scm > 0:
-        print(f'Largest accepted energy non-degeneracy = {scm:.1f} cm-1 for {pairmax}')
+        print(f'Largest accepted non-degeneracy in "{Ecol}" = {scm:.1f} cm-1 for {pairmax}')
     return df
 ##
 def collect_atomic_terms(dfcas, Ecol):
