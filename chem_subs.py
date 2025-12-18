@@ -21,7 +21,7 @@ import scipy.stats
 import matplotlib.pyplot as plt
 from urllib.request import urlopen
 from urllib.parse import quote
-from collections import Counter
+#from collections import Counter
 
 Avogadro_viewer = r"C:\Program Files (x86)\Avogadro\bin\avogadro.exe"
 
@@ -8275,6 +8275,9 @@ def plot_broadened_sticks(Xin, Yin, xlabel, ylabel, xmin=None, xmax=None, fwhm=0
         y = yc[idx].flatten()
         ax.plot(x, y, color=conv_color, alpha=conv_alpha)
         ax.fill_between(x, y, color=conv_color, alpha=conv_alpha)
+    else:
+        xc = X
+        yc = Y
     plt.xlim([xmin, xmax])
     plt.ylim(bottom=0)
     plt.title(title)
@@ -8911,6 +8914,27 @@ def is_unitary(arr2d):
     identity = np.eye(arr2d.shape[0])
     return np.allclose(prod, identity)
 ##
+def unitary_transf(A, U):
+    # Transform matrix A (may be square * 3 dimen)
+    # return B = Udag * A * U
+    # requires Numpy arrays
+    if not is_unitary(U):
+        print_err('', 'Transformation matrix is not unitary')
+    if np.iscomplexobj(A) or np.iscomplexobj(U):
+        B = np.zeros_like(A, dtype=complex)
+    else:
+        B = np.zeros_like(A)
+    if len(A.shape) == 3:
+        # one component (probably x, y, z) at a time
+        for i in range(A.shape[2]):
+            B[:, :, i] = unitary_transf(A[:, :, i], U)
+    else:
+        # simple square matrix
+        V = U.conj().T 
+        B = A @ U
+        B = V @ B 
+    return B 
+##
 def is_hermitian(A):
     # does matrix equal its conjugate transpose?
     B = A.conj().T
@@ -9104,4 +9128,31 @@ def fit_bivariate_poly(XY, Z, n, m, A0=None, resids=False, func=False):
                 z = z + A[i, j] * (x ** i) * (y ** j)
         return z
     return result.x.reshape((n+1, m+1)), result.fun, fpoly
+##
+def c2v_mult(irrl):
+    # Given a list of irreps among 'A1', 'A2', 'B1', 'B2', return their product irrep
+    irrepl = [irr.upper() for irr in irrl]
+    for irr in irrepl:
+        if irr not in ['A1', 'A2', 'B1', 'B2']:
+            print_err('', f'Irrep {irr} is not recognized in C2v')
+    if len(irrepl) > 2:
+        irr = c2v_mult(irrepl[:2])  # product of first two
+        newl = [irr] + irrepl[2:]
+        return c2v_mult(newl)
+    elif len(irrepl) == 1:
+        return irrepl[0]
+    elif len(irrepl) == 0:
+        return 'A1'
+    else:
+        # should be len = 2
+        [irr1, irr2] = sorted(irrepl)
+        if irr1[0] == irr2[0]:
+            irr = 'A'
+        else:
+            irr = 'B'
+        if irr1[1] == irr2[1]:
+            irr += '1'
+        else:
+            irr += '2'
+        return irr
 ##

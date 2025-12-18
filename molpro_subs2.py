@@ -122,6 +122,8 @@ def identify_sections(fpro):
     re_mrci = re.compile(r'PROGRAM \* CI')
     re_soint = re.compile(r'PROGRAM \* SEWLS')
     re_soci = re.compile(r'\* Spin-orbit calculation \*')
+    re_vscf = re.compile(r'PROGRAM \* VSCF')
+    re_vci = re.compile(r'PROGRAM \* VCI')
     
     with open(fpro, 'r') as F:
         for iline, line in enumerate(F):
@@ -148,7 +150,14 @@ def identify_sections(fpro):
                 store_section()
                 sec_name = 'SOintegrals'
             if re_soci.search(line):
+                store_section()
                 sec_name = 'soci'
+            if re_vscf.search(line):
+                store_section()
+                sec_name = 'vscf'
+            if re_vci.search(line):
+                store_section()
+                sec_name = 'vci'
             linebuf.append(line)
         # store the final section
         store_section()
@@ -2446,4 +2455,153 @@ def build_MRCIs_DF(mrci_seclist, ncas):
         nstate = ncas
     dfmrci['refchange'] = np.round(dfmrci.Eref - dfmrci.ref0, 6)
     return dfmrci, nstate
+##
+def vci_parse_basic(textbuf, intype):
+    # Given a block of text as produced by identify_section()['vscf'][0] or ['vci'][0],
+    #    return summary DataFrames of fundamentals and overtones
+    # 'intype' must be 'vscf' or 'vci'
+    # Expected columns (in Molpro file): 
+    #    VSCF:  [Mode, Harmonic, Diagonal, VSCF, E(abs), IR Intens]
+    #    VCI :  [Mode, E(abs), VCISDTQ, IR Intens, Leading Term, ...]
+    jrow = {'VSCF': [2, 4, 6], 'VCI': [3, 4, 5]}  # columns to use
+    intype = intype.upper()
+
+    if intype == 'VSCF':
+        cols = ['Mode', 'Irrep', 'Harmonic', intype, 'Intens']
+    elif intype == 'VCI':
+        cols = ['Mode', 'Irrep', intype, 'Intens', 'Leadwt']
+    else:
+        chem.print_err('', f'Unrecognized intype = {intype}')
+    dfd = {}  # key = vib type, value = DataFrame
+
+    re_start = re.compile(r'\s*(Fundamentals|Overtones)')
+    re_end = re.compile(r' (Overtones|Combination bands)')  # end marker
+    in_block = False
+    vtype = '?'
+    data = None
+    for line in textbuf:
+        if in_block and re_end.match(line):
+            in_block = False
+            # Process data
+            df = pd.DataFrame(data=np.transpose(data), columns=cols)
+            for col in df.columns[2:]:
+                df[col] = df[col].astype(float)
+            dfd[vtype] = df
+        if in_block:
+            w = line.split()
+            if (len(w) < 1) or ('^' not in w[0]):
+                # blank or non-data line
+                continue
+            for i in [0, 1]:
+                data[i].append(w[i])
+            for i, j in zip([2, 3, 4], jrow[intype]):
+                data[i].append(w[j])
+        m = re_start.match(line)
+        if m:
+            in_block = True
+            vtype = m.group(1)
+            data = [[] for col in cols]
+    return dfd
+##
+def vci_parse_combi(textbuf, intype):
+    # Given a block of text as produced by identify_section()['vscf'][0] or ['vci'][0],
+    #    return summary DataFrames of combination modes and resonances
+    # 'intype' must be 'vscf' or 'vci'
+    # Expected columns (in Molpro file): 
+    #    VSCF:  [(up to four modes), Irrep, Harmonic, Diagonal, VSCF, E(abs), IR Intens]
+    #    VCI :  [(up to four modes), E(abs), VCISDTQ, IR Intens, Leading Term, ...]
+    intype = intype.upper()
+
+    if intype == 'VSCF':
+        cols = ['Mode', 'Irrep', 'Harmonic', intype, 'Intens']
+    elif intype == 'VCI':
+        cols = ['Mode', 'Irrep', intype, 'Intens', 'Leadwt']
+    else:
+        chem.print_err('', f'Unrecognized intype = {intype}')
+    jrow = {'VSCF': [1, 3, 5], 'VCI': [2, 3, 4]}  # columns to use, after the irrep
+    
+    dfd = {}  # key = vib type, value = DataFrame
+    re_start = re.compile(r'\s*Combination bands')
+    re_end = re.compile(r'(Zero point vibr|ZPVE)')  # end marker
+    in_block = False
+    data = None
+    
+    # First without VCI resonances
+    for line in textbuf:
+        if in_block and re_end.search(line):
+            in_block = False
+            # Process data
+            df = pd.DataFrame(data = np.transpose(data), columns=cols)
+            for col in df.columns[2:]:
+                df[col] = df[col].astype(float)
+            dfd['Combination bands'] = df
+        if in_block:
+            w = line.split()
+            if (len(w) < 1) or ('^' not in w[0]):
+                # blank or non-data line
+                continue
+            # parse out the modes
+            modes = []
+            while('^' in w[0]):
+                modes.append(w.pop(0))
+            modelbl = ' + '.join(modes)
+            data[0].append(modelbl)
+            data[1].append(w[0])  # irrep
+            for i, j in zip([2, 3, 4], jrow[intype]):
+                data[i].append(w[j])
+        if re_start.match(line):
+            in_block = True
+            data = [[] for col in cols]
+            
+    # Parse the resonances
+    if intype == 'VSCF':
+        # there is no resonance calculation in VSCF
+        return dfd
+    in_res = False
+    re_res = re.compile(r'resonance analysis for state')
+    re_blank = re.compile(r'^\s*$')
+    rcols = ['Irrep', 'Base', 'Nr', 'VCI', 'Intens', 'Composition']
+    data = {col: [] for col in rcols}
+    configd = {}
+    irrep = base = None
+    for line in textbuf:
+        if '^' in line:
+            in_res = False
+        if in_res:
+            w = line.split()
+            if 'State' in line:
+                nr = w[1]
+                energy = w[5]
+                intens = w[-1]
+                configd = {}  # key = config, value = coefficient
+            if 'Configuration' in line:
+                # remove characters ,)(
+                w = re.sub(r'[,)(]', '', line).split()
+                configd[w[4]] = float(w[2])
+            if re_blank.match(line) and len(configd):
+                # save data for this state
+                data['Irrep'].append(irrep)
+                data['Base'].append(base)
+                data['Nr'].append(nr)
+                data['VCI'].append(energy)
+                data['Intens'].append(intens)
+                data['Composition'].append(configd)
+        if re_res.search(line):
+            # new resonance
+            w = line.split()
+            irrep = w.pop()
+            modes = []
+            while '^' in w[-1]:
+                modes.append(w.pop())  # single-mode contributions
+            base = ' + '.join(modes)
+            in_res = True
+        if re_end.search(line):
+            # finish up
+            df = pd.DataFrame(data)
+            df['Nr'] = df['Nr'].astype(int)
+            df['VCI'] = df['VCI'].astype(float)
+            df['Intens'] = df['Intens'].astype(float)
+            dfd['Resonances'] = df
+            break
+    return dfd
 ##
