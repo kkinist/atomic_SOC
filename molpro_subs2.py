@@ -124,6 +124,7 @@ def identify_sections(fpro):
     re_soci = re.compile(r'\* Spin-orbit calculation \*')
     re_vscf = re.compile(r'PROGRAM \* VSCF')
     re_vci = re.compile(r'PROGRAM \* VCI')
+    re_hess = re.compile(r'PROGRAM \* HESSIAN')
     
     with open(fpro, 'r') as F:
         for iline, line in enumerate(F):
@@ -158,6 +159,9 @@ def identify_sections(fpro):
             if re_vci.search(line):
                 store_section()
                 sec_name = 'vci'
+            if re_hess.search(line):
+                store_section()
+                sec_name = 'hessian'
             linebuf.append(line)
         # store the final section
         store_section()
@@ -2400,9 +2404,12 @@ def build_MRCIs_DF(mrci_seclist, ncas):
     irrep = []
     saverec = []
     for igroup, sec in enumerate(mrci_seclist):
-        print(f'MRCI #{igroup:<2d}  : ', end='')
         mrcisec = mrci_sections(sec)
         mrci_meta = mrci_info(mrcisec['top'][0])
+        if 'irrep' not in mrci_meta.keys():
+            # probably a spin-orbit CI; skip it
+            continue
+        print(f'MRCI #{igroup:<2d}  : ', end='')
         irr = mrci_meta['irrep']
         mrci_iter = mrci_iterations(mrcisec['iterations'][0])  # includes 'init_ref' from CASSCF
         if mrci_iter['iterations'] is None:
@@ -2604,4 +2611,74 @@ def vci_parse_combi(textbuf, intype):
             dfd['Resonances'] = df
             break
     return dfd
+##
+def parse_hessian(textbuf, natom):
+    # Return a Hessian matrix given text as from identify_sections()['hessian'][0]
+    # 'natom' is the number of atoms (3*natom is the dimension of the Hessian)
+    re_frc = re.compile(r' Force Constants')
+    re_blank = re.compile(r'^\s*$')
+    re_hdr = re.compile(r'(\s+[A-Z]+\d+)+\s*$')
+    re_data = re.compile(r'\s+[A-Z]+\d+(\s+[-]?\d+\.\d+)+\s*$')
+    in_hess = False
+    coordl = []  # list of coordinate labels (uppercase atomic symbol + [X,Y,Z] + number)
+    dimen = 3 * natom
+    hessian = np.zeros((dimen, dimen), dtype=float)
+    for line in textbuf:
+        if in_hess:
+            if re_hdr.match(line):
+                cols = line.split()
+            if re_data.match(line):
+                w = line.split()
+                rowcoord = w.pop(0)  # label for row
+                if rowcoord not in coordl:
+                    coordl.append(rowcoord)
+                i = coordl.index(rowcoord)  # row index in hessian
+                for colcoord, val in zip(cols, w):
+                    j = coordl.index(colcoord) # columnn index in hessian
+                    hessian[i, j] = hessian[j, i] = float(val)
+            if re_blank.match(line):
+                in_hess = False
+                continue
+        if re_frc.match(line):
+            in_hess = True
+    return hessian, coordl
+##
+def parse_harmonic_freq(textbuf):
+    # Given text as from identify_sections()['hessian'][0], return
+    #    a DataFrame about harmonic vibrational frequencies
+    #    Does not include the eigenvectors
+    re_har = re.compile(r' Normal Modes\s*$')
+    re_end = re.compile(r'low/zero frequencies|Frequencies dumped to record')
+    re_hdr = re.compile(r'(\s+\d+\s*[A-Z]\d)+\s*$')
+    re_int = re.compile(r' Intensities \[km/mol\]')
+
+    modeno = []  # mode numbers assigned by Molpro
+    irrepl = []  # irreps
+    freql  = []  # wavenumbers
+    intens = []  # km/mol
+    in_har = False
+    for line in textbuf:
+        if in_har:
+            if re_end.search(line):
+                in_har = False
+                continue
+            if re_hdr.match(line):
+                w = line.split()
+                while w:
+                    modeno.append(w.pop(0))  # mode number
+                    irrepl.append(w.pop(0))
+            if 'Wavenumbers' in line:
+                w = line.split()
+                freql.extend(w[2:])
+            if re_int.match(line):
+                w = line.split()
+                intens.extend(w[2:])
+        if re_har.match(line):
+            in_har = True
+    df = pd.DataFrame({'Rank': modeno, 'Irrep': irrepl, 'Freq': freql, 'Intens': intens})
+    # change to nuumeric types
+    df['Rank'] = df.Rank.astype(int)
+    df['Freq'] = df.Freq.astype(float)
+    df['Intens'] = df.Intens.astype(float)
+    return df
 ##
