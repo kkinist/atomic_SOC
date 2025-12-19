@@ -119,6 +119,7 @@ def isotopic_mass(atlabel):
               16: {32: 31.9720711744, 33: 32.9714589098, 34: 33.967867004, 36: 35.96708071},
               17: {35: 34.968852682, 37: 36.965902602},
               35: {79: 78.9183376, 81: 80.9162897},
+              42: {92: 91.90680796, 94: 93.90508490, 95: 94.90583877, 96: 95.90467612, 97: 96.90601812, 98: 97.90540482, 100: 99.9074718},
               53: {127: 126.9044719},
               78: {190: 189.9599297, 192: 191.9610387, 194: 193.9626809, 195: 194.9647917, 196: 195.96495209, 198: 197.9678949},
               82: {204: 203.9730435, 206: 205.9744652, 207: 206.9758968, 208: 207.9766520}
@@ -163,6 +164,20 @@ def dominant_isotope(el):
               223.019731, 226.025403, 227.027747, 232.038050,            # Th
               231.035879, 238.050783, 237.048167, 244.064198]            # Pu
     return mtable[Z]
+##
+def isotopic_abundance(el):
+    # Return a dict of mass numbers and isotopic abundances taken from 
+    # https://www.nist.gov/pml/atomic-weights-and-isotopic-compositions-relative-atomic-masses (12/18/2025)
+    Z = elz(el)
+    mtable = [{} for i in range(110)]  # for each element dict key = mass number, value = fractional abundance
+    mtable[8] = {16: 0.99757, 17: 0.00038, 18: 0.00205}
+    mtable[17] = {35: 0.7576, 37: 0.2424}
+    mtable[42] = {92: 0.1453, 94: 0.0915, 95: 0.1584, 96: 0.1667, 97: 0.0960, 98: 0.2439, 100: 0.0982}
+    try:
+        retval = mtable[Z]
+    except:
+        retval = None
+    return retval
 ##
 def max_valence(el):
     # Given element (Z or symbol), return its typical number of 
