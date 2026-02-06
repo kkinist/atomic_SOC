@@ -151,7 +151,9 @@ def identify_sections(fpro):
                 store_section()
                 sec_name = 'SOintegrals'
             if re_soci.search(line):
-                store_section()
+                if sec_name != 'mrci':
+                    # storage of preceding MRCI was triggered by re_mrci
+                    store_section()
                 sec_name = 'soci'
             if re_vscf.search(line):
                 store_section()
