@@ -295,8 +295,9 @@ class MULTI:
                     self.converged = True
                 elif 'MAXIMUM NUMBER OF ITERATIONS REACHED' in line:
                     self.converged = False
+        S = [chem.MULTSPIN[sp] for sp in spin]
         try:
-            df = pd.DataFrame({'Group': gnum, 'Size': size, 'Spin': spin, 'Irrep': irrep,
+            df = pd.DataFrame({'Group': gnum, 'Size': size, 'S': S, 'Spin': spin, 'Irrep': irrep,
                           'Label': lbl, 'Energy': energy, 'dipX': dipx, 'dipY': dipy,
                           'dipZ': dipz})
         except ValueError:
