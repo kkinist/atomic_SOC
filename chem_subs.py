@@ -51,6 +51,7 @@ KJMOL2CM = AU2CM / AU2KJMOL  # kJ/mol expressed in cm**-1
 ECHARGE = 1.602176634e-19  # electron charge in C (exact)
 
 DEBYE = 0.3934303  # Debye/e.a0 from a less reliable source
+DEBYE2SI = 1.e-21 / CLIGHT  # Debye/C.m
 
 OMEGA = '\N{GREEK CAPITAL LETTER OMEGA}'
 LAMDA = '\N{GREEK CAPITAL LETTER LAMDA}'
@@ -1245,12 +1246,12 @@ class ZMatrix(object):
                 # place third atom in XZ plane
                 zvar = self.var[i][0]  # distance
                 r = self.val[zvar]
-                rprev = [z, r]         # for later use
+                #rprev = [z, r]         # for later use
                 zvar = self.var[i][1]  # angle
                 theta = self.val[zvar]
                 if self.unitA == 'degree':
                     theta = np.deg2rad(theta)
-                z += -r * np.cos(theta) # displace from second atom
+                z = r * np.cos(theta)
                 x = r * np.sin(theta)
                 newGeom.addatom(Atom(elem, [x,0.,z]))
             else:
@@ -5634,7 +5635,7 @@ def RMSD(Geom1, Geom2):
 ##
 def Kabsch(Geom1, Geom2, use_masses=False):
     # return the rotation matrix that mimizes the unweighted RMSD (Wikipedia: "Kabsch algorithm")
-    #   (tranform G1 toward G2)
+    #   (transform G1 toward G2)
     G1 = Geom1.copy()   # avoid damaging the input Geometry objects
     G2 = Geom2.copy()
     natom = G1.natom()
@@ -6033,7 +6034,7 @@ def diatomic_rotational_constants(R, V, mass, omega=0, vmax=1, Nmax=5,
     return df
 ##
 def diatomic_spectr(R, V, mass, omega=0, psitol=1.e-6, silent=False, nfgh=51, padwidth=0, 
-                    interp='cubic', ref='phys'):
+                    interp='cubic', ref='phys', retzpe=False):
     '''
     Given a diatomic potential, determine some spectroscopic constants using simplified fitting
     Input units are a.u.
@@ -6055,10 +6056,14 @@ def diatomic_spectr(R, V, mass, omega=0, psitol=1.e-6, silent=False, nfgh=51, pa
         print('Wavefunction tail convergence criterion = {:.1e}'.format(psitol))
     constants = {}
      
-    EvJ, Emin, Re = rovib_levels(R, V, mass, omega, vmax=2, Nmax=2, 
+    retvals = rovib_levels(R, V, mass, omega, vmax=2, Nmax=2, 
             ref=ref, psitol=psitol, nfgh=nfgh, padwidth=padwidth, 
-            interp=interp, silent=silent)
-    constants['Re'] = Re * BOHR  # convert to Angstrom
+            interp=interp, silent=silent, retzpe=retzpe)
+    if retzpe:
+        EvJ, Emin, Rmin, ZPE = retvals
+    else:
+        EvJ, Emin, Rmin = retvals
+    constants['Rmin'] = Rmin * BOHR  # convert to Angstrom
     constants['Emin'] = Emin
     # vibrational levels
     constants['w0'] = EvJ[1,0] - EvJ[0,0]
@@ -6082,11 +6087,13 @@ def diatomic_spectr(R, V, mass, omega=0, psitol=1.e-6, silent=False, nfgh=51, pa
     constants['Be'] = c
     a, b, c = parabfit([0.5, 1.5, 2.5], D)
     constants['De'] = c
+    if retzpe:
+        constants['ZPE'] = ZPE
     return constants
 ##
 def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
                  psitol=1.e-6, silent=False, nfgh=501, padwidth=0, interp='cubic',
-                 vectors=False, persist=False):
+                 vectors=False, persist=False, retzpe=False):
     '''
     Given a potential, return some diatomic rovibrational energies
     Input units are a.u.
@@ -6197,10 +6204,12 @@ def rovib_levels(R, V, mass, omega=0, vmax=2, Nmax=2, ref='phys',
         Rmin = Rpot
 
     EvJ = (EvJ - Emin) * AU2CM
+    retval = [EvJ, Emin, Rmin]
     if vectors:
-        return EvJ, Emin, Rmin, rvec, eigvecs
-    else:
-        return EvJ, Emin, Rmin
+        retval.extend([rvec, eigvecs])
+    if retzpe:
+        retval.append(zpecm)
+    return tuple(retval)
 ##
 def turnover_limits_potential(R, V, Rmin, interp='cubic', tol=0.001):
     # given a diatomic potential V(R), and approx minimum Rmin,
@@ -8073,7 +8082,7 @@ def xxxunique_labels_exptl_terms(dfexpt, newcol='uTerm', verbose=False,
     dfret['uTerm'] = uterm
     return dfret
 ##
-def SL_from_term(term):
+def SL_from_term(term, silent=False):
     # given a term symbol like '(1)1D' or 'a 3D*', return the values of S and L
     # in diatomic (linear) case, return S and Lambda and parity
     # Return None upon failure
@@ -8088,7 +8097,8 @@ def SL_from_term(term):
         if m:
             diatom = True
         else:
-            print_err('', 'not recognized as a term symbol: {:s}'.format(term), halt=False)
+            if not silent:
+                print_err('', 'not recognized as a term symbol: {:s}'.format(term), halt=False)
             return None, None
     mult = int(m.group(1))
     symb = m.group(2)
@@ -9170,4 +9180,85 @@ def c2v_mult(irrl):
         else:
             irr += '2'
         return irr
+##
+def normal_modes(hessian, masses, xunit='bohr', munit='amu'):
+    # Return harmonic vibrational frequencies and their
+    #    normalized, mass-unweighted eigenvectors
+    # "hessian" is the second derivs of the energy (assumed Hartree)
+    # "masses" is the atomic masses
+    # "xunit" can be 'bohr' or 'angstrom'
+    # "munit" can be 'amu' or 'u' or 'me' or 'a.u.'
+    # Frequencies will be returned in cm-1 
+    # Massless eigenvectors will be returned in unit "xunit"
+
+    hess = np.array(hessian)
+    mvec = np.array(masses)
+    ndof = len(mvec) * 3
+    if hess.shape != (ndof, ndof):
+        print_err('', f'Size of hessian = {hess.shape} does not agree with 3*natom = {ndof}')
+    # convert to atomic units
+    if munit.lower() not in ['me', 'a.u.']:
+        # change mass unit
+        if munit.lower() in ['amu', 'u']:
+            mvec *= AMU2AU
+        else:
+            print_err(f'Unrecognized mass unit: {munit}')
+    if xunit.lower() not in ['bohr']:
+        if xunit.lower() in ['angstrom']:
+            hess *= BOHR ** 2
+        else:
+            print_err(f'Unrecognized distance unit: {xunit}')
+    # mass-weight the hessian
+    mext = np.outer(mvec ** -0.5, [1,1,1]).flatten()
+    mwt = np.outer(mext, mext)
+    mhess = hess * mwt
+    eigvals, meigvecs = np.linalg.eigh(mhess)
+    # eigenvalues may be negative
+    esign = np.sign(eigvals)
+    freqs = np.sqrt(np.abs(eigvals)) * esign
+    freqs *= AU2CM
+    # mass-unweight the eigenvectors and normalize
+    eigvecs = (meigvecs.T * mext).T
+    norms = np.linalg.norm(eigvecs, axis=0)
+    eigvecs = eigvecs / norms
+    redmass = (1 / norms ** 2) / AMU2AU
+    return freqs, eigvecs.T, redmass
+##
+def expectation_value(Rprop, prop, R1, wfn1, R2, wfn2, pct=99.99, npt=500):
+    '''
+    For vibrational states of a diatomic molecule
+    Return the expectation value <wfn1|prop|wfn2> where
+        "prop" is given by (x, y) data = (Rprop, prop)
+        "wfn1" is given by (R1, wfn1)
+        "wfn2" is given by (R2, wfn2)
+        "pct" is the minimum percentage of both densities to include
+        "npt" is the number of discrete points used in the triple dot product
+    Also return the integration limits [rlo, rhi]
+    '''
+    # Get limits of R to include requested density
+    ilo1, ihi1 = confinterval(wfn1**2, pct)
+    rlo1, rhi1 = R1[ilo1], R1[ihi1]
+    ilo2, ihi2 = confinterval(wfn2**2, pct)
+    rlo2, rhi2 = R2[ilo2], R2[ihi2]
+    rlo = min(rlo1, rlo2)
+    rhi = max(rhi1, rhi2)
+    if rlo < Rprop.min():
+        print_err('', f'Density lower limit of {rlo:.5f} falls below the property limit of {Rprop.min():.5f}')
+    if rhi > Rprop.max():
+        print_err('', f'Density upper limit of {rhi:.5f} falls above the property limit of {Rprop.max():.5f}')
+    rgrid = np.linspace(rlo, rhi, num=npt)
+    # use cubic spline interpolation
+    fn1 = spline_fit(R1, wfn1)
+    y1grid = fn1(rgrid)
+    fn2 = spline_fit(R2, wfn2)
+    y2grid = fn2(rgrid)
+    fprop = spline_fit(Rprop, prop)
+    pgrid = fprop(rgrid)
+    # triple dot product
+    prod = y1grid * pgrid * y2grid
+    # sum and normalize
+    norm1 = np.linalg.norm(y1grid)
+    norm2 = np.linalg.norm(y2grid)
+    pexpec = prod.sum() / (norm1 * norm2)
+    return pexpec, [rlo, rhi]
 ##
