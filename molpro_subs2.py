@@ -125,6 +125,8 @@ def identify_sections(fpro):
     re_vscf = re.compile(r'PROGRAM \* VSCF')
     re_vci = re.compile(r'PROGRAM \* VCI')
     re_hess = re.compile(r'PROGRAM \* HESSIAN')
+    re_ccsd = re.compile(r'PROGRAM \* CCSD')
+    re_opt = re.compile(r'PROGRAM \* OPT')
     
     with open(fpro, 'r') as F:
         for iline, line in enumerate(F):
@@ -140,6 +142,13 @@ def identify_sections(fpro):
                 # restricted HF
                 store_section()
                 sec_name = 'rhf'
+            if re_ccsd.search(line):
+                # CCSD (closed-shell only?)
+                store_section()
+                sec_name = 'ccsd'
+            if re_opt.search(line):
+                store_section()
+                sec_name = 'opt'
             if re_multi.search(line):
                 store_section()
                 sec_name = 'multi'
@@ -417,6 +426,7 @@ def multi_weights(linebuf):
                 weightl[isym] += [float(x) for x in line.split()]
             if re_blank.match(line):
                 isym = False
+    # weightl will be null for a single-state MCSCF
     return weightl
 ##
 def unnormalize_cas_weights(weights):
@@ -527,11 +537,16 @@ def multi_results(linebufs):
     # return a dataframe of the results for all states
     cols = ['Label', 'E', 'Nuc', 'Kin', '1e', '2e', 'Vir', 'dipX',
            'dipY', 'dipZ', 'DebyeX', 'DebyeY', 'DebyeZ', 'irrep']
-    d = {k: [] for k in cols}
-    for linebuf in linebufs:
-        oned = multi_1result(linebuf)
-        for k in cols:
-            d[k].append(oned[k])
+    if type(linebufs[0]) is list:
+        # linebufs is a list of text blocks
+        d = {k: [] for k in cols}
+        for linebuf in linebufs:
+            oned = multi_1result(linebuf)
+            for k in cols:
+                d[k].append(oned[k])
+    else:
+        # a single MCSCF state
+        d = {k: [v] for k, v in multi_1result(linebufs).items()}
 
     ncol = len(cols)
     dtypel = [str] + [float]*(ncol - 2) + [int]
@@ -1029,6 +1044,44 @@ def hf_occup(filebuf):
             retval['alpha/beta'] = [int(x) for x in line.split()[2:]]
     return retval
 ##
+def cc_result(linebuf):
+    # Given relevant lines for one state, as from identify_sections()['ccsd'][0],
+    # return a dict of some results
+    
+    # size of orbital spaces: number (followed by irrep breakdown)
+    re_spaces = {
+        'core': re.compile(r' Number of core orbitals:\s+(\d+)'),
+        'closed': re.compile(r' Number of closed-shell orbitals:\s+(\d+)'),
+        'external': re.compile(r' Number of external orbitals:\s+(\d+)'),
+    }
+    orbspace = {k: {} for k in re_spaces.keys()}
+    
+    re_energies = {
+        'Ref': re.compile(r'Reference energy\s+([-]?\d+\.\d+)'),
+        'MP2': re.compile(r'MP2 total energy\s+([-]?\d+\.\d+)'),
+        'CCSD': re.compile(r'CCSD total energy\s+([-]?\d+\.\d+)'),
+        'CCSD[T]': re.compile(r'CCSD\[T\] total energy\s+([-]?\d+\.\d+)'),
+        'CCSD(T)': re.compile(r'CCSD\(T\) total energy\s+([-]?\d+\.\d+)')
+    }
+    energies = {}
+    
+    retval = {'spaces': orbspace, 'energy': energies}
+
+    for line in linebuf:
+        for k, regex in re_spaces.items():
+            m = regex.match(line)
+            if m:
+                orbspace[k]['total'] = int(m.group(1))
+                w = line.split('(')
+                orbspace[k]['irreps'] = [int(n) for n in w[1].split()[:-1]]
+        for k, regex in re_energies.items():
+            m = regex.search(line)
+            if m:
+                energies[k] = float(m.group(1))
+    return retval
+##
+
+##
 def soci_sections(inbuf):
     '''
     Given a list of lines of text from the spin-orbit-CI part of the output file,
@@ -1327,11 +1380,12 @@ def soci_vectors(linebuf):
     return retval
 ##
 def soci_composition(linebuf):
-    # Read the composition of the SO-CI eigenvectors (by basis state, IN PERCENT)
+    # Read the composition of the SO-CI states (by basis state, IN PERCENT)
     # Return a dict
     #  key = 'basis', for list of basis states
     #  key = 'matrix', for vectors: first index is basis, second is eigenstate
     # 'linebuf' is a list of lines of text as from soci_section()['so_vectors'][0]
+    #   or soci_sections()['so_compos'][0]
     
     # remove '%' symbols, then use existing function
     buf = [line.replace('%', '') for line in linebuf]
@@ -1495,15 +1549,13 @@ def soci_expec(linebuf, dimen):
             if op:
                 # store previous operator
                 retval[op] = vec
-                if nr:
-                    print(f'*** No values for <i|{op}|i> for state =', nr)
             op = m.group(1)
             vec = np.zeros(dimen)  # dipole moments are real-valued
             nr = list(range(1, dimen+1))
             if 'No matrix element' in line:
                 # read printing threshold
                 thresh = float(line.split()[-1].replace('D', 'E'))
-                nr = []
+                print(f'*** No values for <i|{op}|i> for state =', nr)
         if re_hdr.match(line):
             w = line.split()
             cols = [int(x) for x in w[1:]]
@@ -1515,8 +1567,6 @@ def soci_expec(linebuf, dimen):
             
     # store last operator
     retval[op] = vec
-    if nr:
-        print(f'*** No values for <i|{op}|i> for state =', nr)
     # store threshold if available
     if thresh is not None:
         retval['print_thr'] = thresh
@@ -2393,6 +2443,7 @@ def uncrowd_energies(line):
     return retval
 ##
 def build_MRCIs_DF(mrci_seclist, ncas):
+    # mrci_seclist is from major_sections()['mrci']['header'][0]
     label = []   # state label like "2.3"
     c0 = []
     edav = []
@@ -2401,7 +2452,8 @@ def build_MRCIs_DF(mrci_seclist, ncas):
     edav = []  # "rotated" is available, else "relaxed"
     eref = []  # final reference energy
     ref0 = []  # initial reference energy
-    dipz = []
+    dipmom = [] # list of dipole moment vectors
+    dipz = []   # Z components only
     cigroup = []  # which MRCI calculation (ordinal)
     irrep = []
     saverec = []
@@ -2450,11 +2502,14 @@ def build_MRCIs_DF(mrci_seclist, ncas):
             eci.append(nrg['total'])
             edav.append(nrg['davidson'][vers])
             eref.append(nrg['ref E'])
+            dipmom.append(cires['Dipole'])
             dipz.append(cires['Dipole'][2])
     spin = [chem.MULTSPIN[sm] for sm in spinmult]
+    dipmom = np.array(dipmom)
     data = {'spinM': spinmult, 'S': spin, 'Label': label, 'cigroup': cigroup,
             'E': eci, 'Edav': edav, 'Eref': eref, 'ref0': ref0, 'C0': c0,
-            'dipZ': dipz, 'irrep': irrep, 'saverec': saverec}
+            'dipX': dipmom[:,0], 'dipY': dipmom[:,1], 'dipZ': dipmom[:,2],
+            'Irrep': irrep, 'saverec': saverec}
     dfmrci = pd.DataFrame(data)
     nmrci = len(dfmrci)
     if nmrci != ncas:
@@ -2464,6 +2519,62 @@ def build_MRCIs_DF(mrci_seclist, ncas):
         nstate = ncas
     dfmrci['refchange'] = np.round(dfmrci.Eref - dfmrci.ref0, 6)
     return dfmrci, nstate
+##
+def match_MRCI_to_CASSCF(dfcas, dfmrci, etol=1.e-6):
+    # etol is the permitted discrepancy for reference energy
+    # Match MRCI states with their CASSCF states (modify both dfmrci and dfcas)
+    #    A failure to match probably means that there is an intruder state in MRCI
+    # Spin and irrep must be same
+    # CASSCF energy must match initial (not final) MRCI reference energy
+    # Return the number of MRCI states that could not be matched
+    ncas = len(dfcas)
+    nmrci = len(dfmrci)
+    print(f'Matching {nmrci} MRCI states to {ncas} CASSCF states (etol = {etol})...', end='')
+    dfmrci['iref'] = -999
+    dfmrci['ref0dif'] = np.inf
+    dfcas['ici'] = -999
+    for ici, row in dfmrci.iterrows():
+        S = row.S
+        irrep = row.Irrep
+        Eref = row.ref0
+        # Find the unmatched CASSCF state with the nearest energy
+        subdf = dfcas[(dfcas.S == S) & (dfcas.Irrep == irrep) & (dfcas.ici < 0)]
+        a = np.abs(subdf.Energy.values - Eref)
+        imin = np.argmin(a)
+        mindif = a[imin]
+        if mindif < etol:
+            # this is a match
+            iref = subdf.index.values[imin]
+            ref0dif = Eref - subdf.at[iref, 'Energy']
+            dfmrci.at[ici, 'iref'] = iref
+            dfmrci.at[ici, 'ref0dif'] = ref0dif
+            dfcas.at[iref, 'ici'] = ici
+
+    dffail = dfmrci[dfmrci.iref < 0]
+    nfail = len(dffail)
+    if nfail > 0:
+        print(f'\n*** Failed to match {nfail} MRCI states with a CASSCF reference ***')
+        chem.displayDF(dffail.style.set_properties(subset=['ref0'], **{'background-color': 'pink'}))
+        icasmiss = set(dfcas.index) - set(dfmrci.iref)
+        print('Unmatched CASSCF state(s):')
+        dfbadcas = dfcas.loc[list(icasmiss)].sort_values(['S', 'irrep'])
+        chem.displayDF(dfbadcas.style.set_properties(subset=['E'], **{'background-color': 'cyan'}))
+        print('\n\n***** "ref0" in MRCI should match "E" in CASSCF')
+        print('\tIf ref0 < E(CASSCF), skip (more) states in the MRCI *****')
+        print('\tIf ref0 > E(CASSCF), skip fewer states in the MRCI *****')
+    else:
+        icas = dfmrci.iref.tolist()
+        if len(icas) == len(set(icas)):
+            print('successful.')
+        else:
+            icount = Counter(icas)
+            for i, n in icount.items():
+                if n > 1:
+                    print(f'    {n} CI states matched with CASSCF {i}')
+            ilost = set(dfcas.index) - set(icas)
+            if ilost:
+                print('    CASSCF states not matched:', ilost)
+    return nfail
 ##
 def vci_parse_basic(textbuf, intype):
     # Given a block of text as produced by identify_section()['vscf'][0] or ['vci'][0],
@@ -2614,37 +2725,6 @@ def vci_parse_combi(textbuf, intype):
             break
     return dfd
 ##
-def parse_hessian(textbuf, natom):
-    # Return a Hessian matrix given text as from identify_sections()['hessian'][0]
-    # 'natom' is the number of atoms (3*natom is the dimension of the Hessian)
-    re_frc = re.compile(r' Force Constants')
-    re_blank = re.compile(r'^\s*$')
-    re_hdr = re.compile(r'(\s+[A-Z]+\d+)+\s*$')
-    re_data = re.compile(r'\s+[A-Z]+\d+(\s+[-]?\d+\.\d+)+\s*$')
-    in_hess = False
-    coordl = []  # list of coordinate labels (uppercase atomic symbol + [X,Y,Z] + number)
-    dimen = 3 * natom
-    hessian = np.zeros((dimen, dimen), dtype=float)
-    for line in textbuf:
-        if in_hess:
-            if re_hdr.match(line):
-                cols = line.split()
-            if re_data.match(line):
-                w = line.split()
-                rowcoord = w.pop(0)  # label for row
-                if rowcoord not in coordl:
-                    coordl.append(rowcoord)
-                i = coordl.index(rowcoord)  # row index in hessian
-                for colcoord, val in zip(cols, w):
-                    j = coordl.index(colcoord) # columnn index in hessian
-                    hessian[i, j] = hessian[j, i] = float(val)
-            if re_blank.match(line):
-                in_hess = False
-                continue
-        if re_frc.match(line):
-            in_hess = True
-    return hessian, coordl
-##
 def parse_harmonic_freq(textbuf):
     # Given text as from identify_sections()['hessian'][0], return
     #    a DataFrame about harmonic vibrational frequencies
@@ -2684,3 +2764,138 @@ def parse_harmonic_freq(textbuf):
     df['Intens'] = df.Intens.astype(float)
     return df
 ##
+def parse_hessian(textbuf, natom):
+    # Return a Hessian matrix given text as from identify_sections()['hessian'][0]
+    # 'natom' is the number of atoms (3*natom is the dimension of the Hessian)
+    re_frc = re.compile(r' Force Constants')
+    re_blank = re.compile(r'^\s*$')
+    re_hdr = re.compile(r'(\s+[A-Z]+\d+)+\s*$')
+    re_data = re.compile(r'\s+[A-Z]+\d+(\s+[-]?\d+\.\d+)+\s*$')
+    in_hess = False
+    coordl = []  # list of coordinate labels (uppercase atomic symbol + [X,Y,Z] + number)
+    dimen = 3 * natom
+    hessian = np.zeros((dimen, dimen), dtype=float)
+    for line in textbuf:
+        if in_hess:
+            if re_hdr.match(line):
+                cols = line.split()
+            if re_data.match(line):
+                w = line.split()
+                rowcoord = w.pop(0)  # label for row
+                if rowcoord not in coordl:
+                    coordl.append(rowcoord)
+                i = coordl.index(rowcoord)  # row index in hessian
+                for colcoord, val in zip(cols, w):
+                    j = coordl.index(colcoord) # columnn index in hessian
+                    hessian[i, j] = hessian[j, i] = float(val)
+            if re_blank.match(line):
+                in_hess = False
+                continue
+        if re_frc.match(line):
+            in_hess = True
+    return hessian, coordl
+##
+def parse_dipder(textbuf, silent=False):
+    # Given text as from identify_sections()['hessian'][0], return
+    #    dipole moment and primitive dipole derivatives (debye/ang)
+    # Return (moment, derivatives) as numpy arrays
+    
+    re_data = re.compile(r'\s+\d(\s+[-]?\d+\.\d+)+\s*$')
+    inderiv = False
+    derlist = [[], [], []]  # for axes "1", "2", "3" (x, y, z)
+    for iline in range(len(textbuf)):
+        line = textbuf[iline]
+        if 'Permanent Dipole Moment [debye]' in line:
+            # read from the following line
+            w = textbuf[iline+1].split()
+            moment = np.array([float(x) for x in w[-3:]])
+            if not silent:
+                print('Dipole moment is in debye')
+        if inderiv:
+            if 'Projecting out rotations and translations' in line:
+                inderiv = False
+                continue
+            if re_data.match(line):
+                w = line.split()
+                iax = int(w[0]) - 1
+                derlist[iax].extend([float(x) for x in w[1:]])
+        if 'Dipole Moment Derivatives [debye/ang]' in line:
+            inderiv = True
+            if not silent:
+                print('Units of dipole derivative are debye/ang')
+    dipder = np.array(derlist)
+    # transpose to that each row is for one primitive geometry coord
+    return moment, dipder.T
+##
+def parse_vib_details(textbuf):
+    # Given text as from identify_sections()['hessian'][0], return
+    #   a dict 
+    # Molpro's mode vectors are not normalized and are mass-unweighted
+    #   using masses in amu
+    
+    # Atomic masses
+    massl = []
+    inmass = False
+    re_mass = re.compile(r'\s+\d+\s*[-]\s+\d+(\s+\d+\.\d+)+$')
+    for line in textbuf:
+        if 'Mass weighted Second Derivative Matrix' in line:
+            inmass = False
+        if inmass:
+            if re_mass.match(line):
+                massl.extend([float(x) for x in line.split()[2:]])
+        if 'Atomic Masses' in line:
+            inmass = True
+    natom = len(massl)
+    ndof = 3 * natom
+    
+    # Ordinary (mass-unweighted) normal mode vectors for internal modes
+    modevecs = [[] for i in range(ndof)]
+    coordlbls = []  # list of text labels for primitive cartesian coords
+    inmv = False
+    re_blank = re.compile(r'^\s*$')
+    re_data = re.compile(r'\s+[A-Z\d]+(\s+[-]?\d+\.\d+)+$')
+    icoord = -1
+    for line in textbuf:
+        if re_blank.match(line):
+            inmv = False
+        if inmv:
+            if re_data.match(line):
+                w = line.split()
+                clbl = w[0]
+                if clbl in coordlbls:
+                    icoord = coordlbls.index(clbl)
+                else:
+                    coordlbls.append(clbl)
+                    icoord += 1
+                modevecs[icoord].extend([float(x) for x in w[1:]])            
+        if 'Intensities [relative]' in line:
+            inmv = True
+    # transpose so that rows are the eigenvectors
+    modevecs = np.array(modevecs).T
+    
+    # Mass-weighted eigenvectors (all)
+    mwtdvec = np.zeros((ndof, ndof))
+    inwtd = False
+    icols = []
+    irow = -1
+    re_ints = re.compile(r'(\s+\d+)+$')
+    re_dat = re.compile(r'\s*\d+(\s+[-]?\d+\.\d+)+$')
+    for line in textbuf:
+        if re_blank.match(line):
+            inwtd = False
+        if inwtd:
+            if re_ints.match(line):
+                icols = np.array(line.split()).astype(int) - 1
+            if re_dat.match(line):
+                w = line.split()
+                irow = int(w[0]) - 1
+                mwtdvec[irow, icols] = np.array(w[1:]).astype(float)
+        if 'Mass Weighted 2nd Derivative Matrix Eigenvectors' in line:
+            inwtd = True
+            print('Molpro uses mass weights in amu')
+    # Transpose so that first index is for the mode number
+    mwtdvec = mwtdvec.T
+    
+    retval = {'masses': np.array(massl), 'modevecs': modevecs,
+              'mwtd_vecs': mwtdvec}
+    return retval
