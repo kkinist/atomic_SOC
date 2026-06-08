@@ -2347,7 +2347,7 @@ def minimize_RMSD_rotation(G, Gref):
         else:
             xstr = ''
         for a in self.atom:
-            xstr += '{:s}\t{:10.5f}\t{:10.5f}\t{:10.5f}\n'.format(a.el, a.xyz[0], a.xyz[1], a.xyz[2])
+            xstr += '{:s}\t{:11.6f}\t{:11.6f}\t{:11.6f}\n'.format(a.el, a.xyz[0], a.xyz[1], a.xyz[2])
         return xstr
     def printXYZ(self, fname='', comment='', handle=False):
         # print a string in Xmol's XYZ format, to file or stdout

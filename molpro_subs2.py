@@ -514,7 +514,8 @@ def scf_result(scftype, linebuf):
             dip = [float(x) for x in line.split()[-3:]]
             [d['DebyeX'], d['DebyeY'], d['DebyeZ']] = dip
     # extract irrep from label
-    d['irrep'] = lbl.split()[0].split('.')[-1]
+    if lbl:
+        d['irrep'] = lbl.split()[0].split('.')[-1]
     return d
 ##
 def multi_1result(linebuf):
@@ -807,6 +808,7 @@ def mrci_iterations(linebuf):
     retval = {}
     in_eref = in_iter = False
     no_iter = True  # sometimes MRCI is used only to save, without iterating
+    retval['saverec'] = None  # default
     iterdat = []  # list of rows
     for rawline in linebuf:
         line = uncrowd_DExp(rawline)  # in case a space was lost to large time
@@ -1442,20 +1444,24 @@ def soci_energies(linebuf):
     #  key = 'E', for list of energies in Hartree
     #  key = 'Erel', for energies in cm-1 relative to ground level
     #  key = 'Eshift' for energies in cm-1 relative to lowest basis state
+    #  key = 'irrep' for level irrep "Sym", if available
     # 'linebuf' is a list of lines of text as from soci_section()['so_levels'][0]
     re_data = re.compile(r'(?:\s+\d+){1,2}(\s+[-]?\d+\.\d+)+')
     
     eabs = []
     eshift = []
     erel = []
+    irrepl = []
     retval = {'E': eabs, 'Eshift': eshift, 'Erel': erel}
     iabs = irel = ishift = n1 = 9999
+    sym = False
     for rawline in linebuf:
         line = uncrowd_energies(rawline) # in case a space is lost to large energy
         if 'Nr' in line:
             # first header line
             w1 = line.split()[1:]
             n1 = len(w1)
+            sym = ('Sym' in line)
         elif 'au' in line:
             # second header line
             w2 = line.split()
@@ -1476,6 +1482,10 @@ def soci_energies(linebuf):
             eabs.append(float(w[iabs]))
             erel.append(float(w[irel]))
             eshift.append(float(w[ishift]))
+            if sym:
+                irrepl.append(int(w[0]))
+    if len(irrepl):
+        retval['irrep'] = irrepl
     return retval
 ##
 def soci_propmats(linebuf, dimen):
@@ -2483,8 +2493,15 @@ def build_MRCIs_DF(mrci_seclist, ncas):
             iref0 = np.argmax(abs(mrci_res['coefxmat']), axis=1)  # maximum overlaps
             if len(set(iref0)) < len(iref0):
                 print('*** duplicated reference state ***')
-                print(iref0)
+                print(iref0, type(iref0), type(iref0[0]))
                 print(mrci_res['coefxmat'])
+                inpref0 = input(f'List to replace {iref0} (blank to leave unchanged) ')
+                if inpref0:
+                    w = re.sub(r'\D', ' ', inpref0).split()  # remove non-numeric
+                    if len(w) == len(iref0):
+                        iref0 = np.array(w).astype(int)
+                    else:
+                        print('*** wrong number of references; no change made ***')
             for i in range(nstates):
                 ref0.append(ini_ref[iref0[i]])
         else:
@@ -2899,3 +2916,17 @@ def parse_vib_details(textbuf):
     retval = {'masses': np.array(massl), 'modevecs': modevecs,
               'mwtd_vecs': mwtdvec}
     return retval
+##
+def read_dipole_moments(linebuf):
+    # Return a list of state labels and a list of dipole moment vectors
+    lbll = []
+    vecl = []
+    re_dip = re.compile(r' \![A-Z]+ STATE\s*(\S+) Dipole moment')
+    for line in linebuf:
+        m = re_dip.match(line)
+        if m:
+            lbll.append(m.group(1))
+            w = line.split()
+            vecl.append(np.array([float(x) for x in w[-3:]]))
+    return lbll, vecl
+##
